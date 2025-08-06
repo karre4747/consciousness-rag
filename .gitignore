@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.env
+*.log
+.DS_Store
+qdrant_data/
+*.tar.gz
+venv/
+.pytest_cache/

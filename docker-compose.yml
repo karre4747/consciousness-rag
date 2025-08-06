@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  api:
+    build: ./api
+    ports:
+      - "8500:8000"
+    volumes:
+      - ./api:/app
+    depends_on:
+      - qdrant
+
+volumes:
+  qdrant_data:
