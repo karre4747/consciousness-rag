@@ -72,14 +72,7 @@ async def lifespan(app: FastAPI):
         
         # Initialize OpenAI
         logger.info("Initializing OpenAI client...")
-        # Clear any proxy environment variables that might interfere
-        for var in ['OPENAI_BASE_URL', 'OPENAI_API_BASE']:
-            if var in os.environ:
-                del os.environ[var]
-        openai_client = OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            base_url="https://api.openai.com/v1"
-        )
+        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         
         # Initialize Anthropic
         logger.info("Initializing Anthropic client...")
