@@ -1,0 +1,17 @@
+[Unit]
+Description=Evolve Consciousness Engine API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/conscious-engine/backend
+Environment="PATH=/opt/conscious-engine/backend/venv/bin"
+ExecStart=/opt/conscious-engine/backend/venv/bin/python main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
