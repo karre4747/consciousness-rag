@@ -10,6 +10,8 @@ load_dotenv(override=True)  # Override system environment variables
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
@@ -105,6 +107,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # === PYDANTIC MODELS ===
@@ -220,7 +225,13 @@ ANSWER:"""
 
 @app.get("/")
 def read_root():
-    """Health check endpoint"""
+    """Serve upload interface"""
+    return FileResponse("static/index.html")
+
+
+@app.get("/api")
+def api_status():
+    """API status endpoint"""
     return {
         "status": "Evolve Consciousness Engine Online",
         "version": "1.0.0",

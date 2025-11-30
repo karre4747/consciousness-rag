@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evolve Consciousness Engine - Upload</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .upload-section {
+            margin-bottom: 30px;
+        }
+
+        .drop-zone {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 60px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9ff;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+            transform: scale(1.02);
+        }
+
+        .drop-zone-text {
+            font-size: 1.2em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .drop-zone-subtext {
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .level-selector {
+            margin: 30px 0;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .level-btn {
+            padding: 12px 30px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .level-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .level-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .ai-tagging {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .ai-tagging input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .file-list {
+            margin-top: 30px;
+        }
+
+        .file-item {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: #333;
+            flex: 1;
+        }
+
+        .file-status {
+            margin-left: 15px;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .status-pending {
+            background: #ffeaa7;
+            color: #fdcb6e;
+        }
+
+        .status-uploading {
+            background: #74b9ff;
+            color: #0984e3;
+        }
+
+        .status-success {
+            background: #55efc4;
+            color: #00b894;
+        }
+
+        .status-error {
+            background: #ff7675;
+            color: #d63031;
+        }
+
+        .upload-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .upload-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .upload-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-container {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+
+        .summary {
+            text-align: center;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 10px;
+        }
+
+        .summary-item {
+            display: inline-block;
+            margin: 0 15px;
+            font-size: 1.1em;
+        }
+
+        .summary-number {
+            font-weight: 700;
+            font-size: 1.5em;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Evolve Consciousness Engine</h1>
+        <p class="subtitle">Upload your consciousness, recovery, and spiritual content</p>
+
+        <div class="upload-section">
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-text">Drag & Drop Files Here</div>
+                <div class="drop-zone-subtext">or click to browse</div>
+                <div class="drop-zone-subtext">Supports: PDF, DOCX, TXT, MD</div>
+            </div>
+            <input type="file" id="fileInput" class="file-input" multiple accept=".pdf,.docx,.txt,.md">
+        </div>
+
+        <div class="level-selector">
+            <button class="level-btn active" data-level="beginner">Beginner</button>
+            <button class="level-btn" data-level="intermediate">Intermediate</button>
+            <button class="level-btn" data-level="advanced">Advanced</button>
+        </div>
+
+        <div class="ai-tagging">
+            <input type="checkbox" id="aiTagging">
+            <label for="aiTagging">Enable AI-Enhanced Tagging (slower, more accurate)</label>
+        </div>
+
+        <div class="file-list" id="fileList"></div>
+
+        <button class="upload-btn" id="uploadBtn" disabled>Upload Files</button>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            <div class="summary" id="summary"></div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const levelBtns = document.querySelectorAll('.level-btn');
+        const aiTagging = document.getElementById('aiTagging');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const summary = document.getElementById('summary');
+
+        let selectedFiles = [];
+        let selectedLevel = 'beginner';
+
+        // Drop zone events
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        // Level selection
+        levelBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                levelBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedLevel = btn.dataset.level;
+            });
+        });
+
+        function handleFiles(files) {
+            selectedFiles = Array.from(files);
+            renderFileList();
+            uploadBtn.disabled = selectedFiles.length === 0;
+        }
+
+        function renderFileList() {
+            fileList.innerHTML = '';
+            selectedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <span class="file-name">${file.name}</span>
+                    <span class="file-status status-pending" id="status-${index}">Pending</span>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        uploadBtn.addEventListener('click', uploadFiles);
+
+        async function uploadFiles() {
+            uploadBtn.disabled = true;
+            progressContainer.style.display = 'block';
+
+            let successful = 0;
+            let failed = 0;
+
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                const statusEl = document.getElementById(`status-${i}`);
+
+                statusEl.textContent = 'Uploading...';
+                statusEl.className = 'file-status status-uploading';
+
+                const success = await uploadFile(file);
+
+                if (success) {
+                    successful++;
+                    statusEl.textContent = 'Success';
+                    statusEl.className = 'file-status status-success';
+                } else {
+                    failed++;
+                    statusEl.textContent = 'Failed';
+                    statusEl.className = 'file-status status-error';
+                }
+
+                const progress = Math.round(((i + 1) / selectedFiles.length) * 100);
+                progressFill.style.width = progress + '%';
+                progressFill.textContent = progress + '%';
+            }
+
+            summary.innerHTML = `
+                <div class="summary-item">
+                    <div class="summary-number">${selectedFiles.length}</div>
+                    <div>Total Files</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-number" style="color: #00b894;">${successful}</div>
+                    <div>Successful</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-number" style="color: #d63031;">${failed}</div>
+                    <div>Failed</div>
+                </div>
+            `;
+
+            uploadBtn.disabled = false;
+        }
+
+        async function uploadFile(file) {
+            try {
+                const reader = new FileReader();
+                const text = await new Promise((resolve, reject) => {
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsText(file);
+                });
+
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        title: file.name.replace(/\.[^/.]+$/, ''),
+                        source: file.name,
+                        program_level: selectedLevel,
+                        use_ai_tagging: aiTagging.checked
+                    })
+                });
+
+                return response.ok;
+            } catch (error) {
+                console.error('Upload error:', error);
+                return false;
+            }
+        }
+    </script>
+</body>
+</html>
