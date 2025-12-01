@@ -295,14 +295,14 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "tags": list(set(tags))[:50],  # Limit to 50 unique tags
         "detected_categories": detected_categories,
         "emotions": emotions,
-        "primary_chakra": detected_categories.get("chakras", [None])[0] if detected_categories.get("chakras") else None,
+        "primary_chakra": detected_categories.get("chakras", [""])[0] if detected_categories.get("chakras") else "",
         "consciousness_level": detected_categories.get("consciousness_level", ["neutrality"])[0] if detected_categories.get("consciousness_level") else "neutrality",
-        "tradition": detected_categories.get("traditions", [None])[0] if detected_categories.get("traditions") else None,
-        "teacher": detected_categories.get("teachers", [None])[0] if detected_categories.get("teachers") else None,
-        "ascension_path": detected_categories.get("ascension_paths", [None])[0] if detected_categories.get("ascension_paths") else None,
-        "bridge_concept": detected_categories.get("bridge_concepts", [None])[0] if detected_categories.get("bridge_concepts") else None,
-        "recovery_focus": detected_categories.get("addiction_type", [None])[0] if detected_categories.get("addiction_type") else None,
-        "healing_modality": detected_categories.get("healing_modalities", [None])[0] if detected_categories.get("healing_modalities") else None
+        "tradition": detected_categories.get("traditions", [""])[0] if detected_categories.get("traditions") else "",
+        "teacher": detected_categories.get("teachers", [""])[0] if detected_categories.get("teachers") else "",
+        "ascension_path": detected_categories.get("ascension_paths", [""])[0] if detected_categories.get("ascension_paths") else "",
+        "bridge_concept": detected_categories.get("bridge_concepts", [""])[0] if detected_categories.get("bridge_concepts") else "",
+        "recovery_focus": detected_categories.get("addiction_type", [""])[0] if detected_categories.get("addiction_type") else "",
+        "healing_modality": detected_categories.get("healing_modalities", [""])[0] if detected_categories.get("healing_modalities") else ""
     }
 
 
@@ -469,13 +469,13 @@ def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "ollama", 
                 "primary_theme": ai_tags.get("primary_theme", ""),
                 "consciousness_level": ai_tags.get("consciousness_level", keyword_tags.get("consciousness_level", "")),
                 "emotions": keyword_tags.get("emotions", []),
-                "primary_chakra": keyword_tags.get("primary_chakra"),
-                "tradition": keyword_tags.get("tradition"),
-                "teacher": keyword_tags.get("teacher"),
-                "ascension_path": keyword_tags.get("ascension_path"),
-                "bridge_concept": keyword_tags.get("bridge_concept"),
-                "recovery_focus": keyword_tags.get("recovery_focus"),
-                "healing_modality": keyword_tags.get("healing_modality")
+                "primary_chakra": keyword_tags.get("primary_chakra", ""),
+                "tradition": keyword_tags.get("tradition", ""),
+                "teacher": keyword_tags.get("teacher", ""),
+                "ascension_path": keyword_tags.get("ascension_path", ""),
+                "bridge_concept": keyword_tags.get("bridge_concept", ""),
+                "recovery_focus": keyword_tags.get("recovery_focus", ""),
+                "healing_modality": keyword_tags.get("healing_modality", "")
             }
 
             # Only add program_level if detected from filename
