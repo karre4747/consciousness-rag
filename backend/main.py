@@ -447,6 +447,139 @@ def get_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# === DOCUMENT MANAGEMENT ENDPOINTS ===
+
+@app.get("/uploaded-documents")
+async def get_uploaded_documents():
+    """
+    Get list of all unique documents currently in Pinecone
+
+    Returns:
+        List of documents with titles, chunk counts
+    """
+    try:
+        # Query Pinecone to get all vectors
+        query_vector = [0.0] * PINECONE_DIMENSION
+        results = index.query(
+            vector=query_vector,
+            top_k=10000,  # Maximum allowed by Pinecone
+            include_metadata=True
+        )
+
+        # Group by title to get unique documents
+        documents_dict = {}
+        for match in results.matches:
+            title = match.metadata.get('title', 'Unknown')
+
+            if title not in documents_dict:
+                documents_dict[title] = {
+                    'title': title,
+                    'source': match.metadata.get('source', ''),
+                    'chunk_count': 0,
+                    'total_chunks': match.metadata.get('total_chunks', 0)
+                }
+
+            documents_dict[title]['chunk_count'] += 1
+
+        # Convert to list and sort alphabetically
+        doc_list = sorted(documents_dict.values(), key=lambda x: x['title'].lower())
+
+        return {
+            "status": "success",
+            "total_documents": len(doc_list),
+            "documents": doc_list
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get uploaded documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/check-duplicate")
+async def check_duplicate(request: Dict[str, str]):
+    """
+    Check if a document with this title already exists
+
+    Args:
+        request: {"title": "document_name"}
+
+    Returns:
+        {"exists": bool, "chunk_count": int}
+    """
+    try:
+        title = request.get("title")
+
+        # Query Pinecone with metadata filter to find this title
+        query_vector = [0.0] * PINECONE_DIMENSION
+        results = index.query(
+            vector=query_vector,
+            top_k=100,  # Get enough to count chunks
+            include_metadata=True,
+            filter={"title": title}
+        )
+
+        exists = len(results.matches) > 0
+        chunk_count = len(results.matches) if exists else 0
+
+        return {
+            "status": "success",
+            "exists": exists,
+            "chunk_count": chunk_count,
+            "title": title
+        }
+
+    except Exception as e:
+        logger.error(f"Duplicate check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/delete-document/{title}")
+async def delete_document(title: str):
+    """
+    Delete all chunks of a document from Pinecone
+
+    Args:
+        title: Document title (URL-encoded)
+
+    Returns:
+        Confirmation with number of chunks deleted
+    """
+    try:
+        # First, query to find all chunks with this title
+        query_vector = [0.0] * PINECONE_DIMENSION
+        results = index.query(
+            vector=query_vector,
+            top_k=10000,  # Get all chunks
+            include_metadata=True,
+            filter={"title": title}
+        )
+
+        # Collect all IDs to delete
+        ids_to_delete = [match.id for match in results.matches]
+
+        if not ids_to_delete:
+            return {
+                "status": "success",
+                "message": f"No chunks found for '{title}'",
+                "chunks_deleted": 0
+            }
+
+        # Delete all chunks
+        index.delete(ids=ids_to_delete)
+
+        logger.info(f"Deleted {len(ids_to_delete)} chunks of document '{title}'")
+
+        return {
+            "status": "success",
+            "message": f"Deleted {len(ids_to_delete)} chunks of '{title}'",
+            "chunks_deleted": len(ids_to_delete)
+        }
+
+    except Exception as e:
+        logger.error(f"Delete failed for '{title}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # === CLAUDE SPENDING TRACKING ENDPOINTS ===
 
 @app.get("/spending-dashboard")

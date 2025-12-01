@@ -351,6 +351,106 @@
         .history-item:hover {
             background: #f8f9ff;
         }
+
+        /* Uploaded Documents Section */
+        .uploaded-docs-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .uploaded-docs-section h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .docs-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .docs-stats {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #555;
+        }
+
+        .docs-list {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            background: #fafafa;
+        }
+
+        .doc-item {
+            display: grid;
+            grid-template-columns: 3fr 1fr 100px;
+            gap: 15px;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            align-items: center;
+            background: white;
+            transition: all 0.2s ease;
+        }
+
+        .doc-item:hover {
+            background: #f8f9ff;
+            transform: translateX(5px);
+        }
+
+        .doc-item:last-child {
+            border-bottom: none;
+        }
+
+        .doc-title {
+            font-weight: 600;
+            color: #333;
+            word-break: break-word;
+        }
+
+        .doc-chunks {
+            color: #666;
+            font-size: 0.9em;
+            text-align: center;
+        }
+
+        .doc-actions {
+            text-align: right;
+        }
+
+        .doc-actions button {
+            padding: 6px 15px;
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .doc-actions button:hover {
+            background: #ee5555;
+            transform: scale(1.05);
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
     </style>
 </head>
 <body>
@@ -437,6 +537,28 @@
                 View Detailed History
             </button>
         </div>
+
+        <!-- Uploaded Documents List -->
+        <div class="uploaded-docs-section" id="uploadedDocsSection">
+            <h3>📚 Uploaded Documents</h3>
+
+            <div class="docs-controls">
+                <button class="secondary-btn" onclick="refreshDocumentList()">
+                    🔄 Refresh List
+                </button>
+                <input type="text" id="docSearch" placeholder="🔍 Search documents..."
+                       onkeyup="filterDocuments()"
+                       style="padding: 10px; border-radius: 5px; border: 1px solid #667eea; width: 300px; font-size: 1em;">
+            </div>
+
+            <div class="docs-stats">
+                <p>📊 <strong id="totalDocs">0</strong> documents in database</p>
+            </div>
+
+            <div class="docs-list" id="docsList">
+                <div class="loading">Loading documents...</div>
+            </div>
+        </div>
     </div>
 
     <!-- Modal Overlay -->
@@ -507,10 +629,29 @@
 
             let successful = 0;
             let failed = 0;
+            let skipped = 0;
 
             for (let i = 0; i < selectedFiles.length; i++) {
                 const file = selectedFiles[i];
                 const statusEl = document.getElementById(`status-${i}`);
+                const title = file.name.replace(/\.[^/.]+$/, '');
+
+                // Check for duplicates before uploading
+                statusEl.textContent = 'Checking for duplicates...';
+                statusEl.className = 'file-status status-uploading';
+
+                const shouldProceed = await checkDuplicateBeforeUpload(title);
+
+                if (!shouldProceed) {
+                    skipped++;
+                    statusEl.textContent = 'Skipped (duplicate)';
+                    statusEl.className = 'file-status status-error';
+
+                    const progress = Math.round(((i + 1) / selectedFiles.length) * 100);
+                    progressFill.style.width = progress + '%';
+                    progressFill.textContent = progress + '%';
+                    continue;
+                }
 
                 statusEl.textContent = 'Uploading...';
                 statusEl.className = 'file-status status-uploading';
@@ -545,7 +686,14 @@
                     <div class="summary-number" style="color: #d63031;">${failed}</div>
                     <div>Failed</div>
                 </div>
+                <div class="summary-item">
+                    <div class="summary-number" style="color: #f39c12;">${skipped}</div>
+                    <div>Skipped</div>
+                </div>
             `;
+
+            // Refresh the document list to show newly uploaded files
+            await loadDocumentList();
 
             uploadBtn.disabled = false;
         }
@@ -580,6 +728,146 @@
                 return false;
             }
         }
+
+        // ========================================
+        // DOCUMENT LIST MANAGEMENT
+        // ========================================
+
+        // Load document list on page load
+        async function loadDocumentList() {
+            try {
+                const docsList = document.getElementById('docsList');
+                docsList.innerHTML = '<div class="loading">Loading documents...</div>';
+
+                const response = await fetch('/uploaded-documents');
+                const data = await response.json();
+
+                document.getElementById('totalDocs').textContent = data.total_documents;
+
+                if (data.documents.length === 0) {
+                    docsList.innerHTML = '<div class="no-results">📭 No documents uploaded yet</div>';
+                    return;
+                }
+
+                docsList.innerHTML = data.documents.map(doc => `
+                    <div class="doc-item" data-title="${escapeHtml(doc.title)}">
+                        <div class="doc-title">${escapeHtml(doc.title)}</div>
+                        <div class="doc-chunks">${doc.chunk_count} chunks</div>
+                        <div class="doc-actions">
+                            <button onclick="deleteDocument('${escapeHtml(doc.title).replace(/'/g, "\\'")}')">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Failed to load documents:', error);
+                document.getElementById('docsList').innerHTML =
+                    '<div class="loading">❌ Failed to load documents</div>';
+            }
+        }
+
+        // Refresh document list
+        async function refreshDocumentList() {
+            await loadDocumentList();
+        }
+
+        // Search/filter documents
+        function filterDocuments() {
+            const searchTerm = document.getElementById('docSearch').value.toLowerCase();
+            const items = document.querySelectorAll('.doc-item');
+            let visibleCount = 0;
+
+            items.forEach(item => {
+                const title = item.dataset.title.toLowerCase();
+                if (title.includes(searchTerm)) {
+                    item.style.display = 'grid';
+                    visibleCount++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            // Show "no results" message if search yields nothing
+            const docsList = document.getElementById('docsList');
+            const existingNoResults = docsList.querySelector('.no-results');
+            if (existingNoResults) existingNoResults.remove();
+
+            if (visibleCount === 0 && items.length > 0) {
+                const noResults = document.createElement('div');
+                noResults.className = 'no-results';
+                noResults.textContent = `No documents match "${document.getElementById('docSearch').value}"`;
+                docsList.appendChild(noResults);
+            }
+        }
+
+        // Delete document
+        async function deleteDocument(title) {
+            if (!confirm(`⚠️ Are you sure you want to delete "${title}"?\n\nThis will remove all chunks from the database.\n\nThis action cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/delete-document/${encodeURIComponent(title)}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    alert(`✅ ${data.message}`);
+                    await loadDocumentList(); // Refresh list
+                } else {
+                    alert('❌ Failed to delete document');
+                }
+
+            } catch (error) {
+                alert('❌ Failed to delete document');
+                console.error('Delete error:', error);
+            }
+        }
+
+        // Check for duplicate before uploading
+        async function checkDuplicateBeforeUpload(title) {
+            try {
+                const response = await fetch('/check-duplicate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({title: title})
+                });
+
+                const data = await response.json();
+
+                if (data.exists) {
+                    // Show warning with option to proceed or cancel
+                    const proceed = confirm(
+                        `⚠️ DUPLICATE DETECTED\n\n` +
+                        `"${title}" already exists in the database with ${data.chunk_count} chunks.\n\n` +
+                        `Click OK to upload anyway (will create duplicate)\n` +
+                        `Click Cancel to skip this file`
+                    );
+
+                    return proceed; // true = upload anyway, false = skip
+                }
+
+                return true; // Not a duplicate, proceed with upload
+
+            } catch (error) {
+                console.error('Duplicate check failed:', error);
+                return true; // If check fails, allow upload
+            }
+        }
+
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadDocumentList();
+        });
     </script>
 </body>
 </html>
