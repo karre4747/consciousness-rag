@@ -385,13 +385,13 @@ async def upload_document(request: UploadRequest):
                         "primary_theme": tags.get("primary_theme", ""),
                         "consciousness_level": tags.get("consciousness_level", ""),
                         "emotions": tags.get("emotions", []),
-                        "primary_chakra": tags.get("primary_chakra"),
-                        "tradition": tags.get("tradition"),
-                        "teacher": tags.get("teacher"),
-                        "ascension_path": tags.get("ascension_path"),
-                        "bridge_concept": tags.get("bridge_concept"),
-                        "recovery_focus": tags.get("recovery_focus"),
-                        "healing_modality": tags.get("healing_modality")
+                        "primary_chakra": tags.get("primary_chakra", ""),
+                        "tradition": tags.get("tradition", ""),
+                        "teacher": tags.get("teacher", ""),
+                        "ascension_path": tags.get("ascension_path", ""),
+                        "bridge_concept": tags.get("bridge_concept", ""),
+                        "recovery_focus": tags.get("recovery_focus", ""),
+                        "healing_modality": tags.get("healing_modality", "")
                     }
 
                     # Add program_level only if detected (addiction-specific content)
