@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Evolve Consciousness Engine - Backend API
 FastAPI backend with Pinecone vector database, OpenAI embeddings, and Claude AI
@@ -6,6 +8,14 @@ FastAPI backend with Pinecone vector database, OpenAI embeddings, and Claude AI
 # Load environment variables FIRST before any other imports
 from dotenv import load_dotenv
 import os
+import sys
+
+# Ensure UTF-8 encoding
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr.reconfigure(encoding='utf-8')
+
 load_dotenv(override=True)  # Override system environment variables
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
