@@ -374,24 +374,47 @@ async def upload_document(request: UploadRequest):
                     )
 
                     # Create metadata with all enhanced tags
+                    # Extract detected_categories for flattening
+                    detected_cats = tags.get("detected_categories", {})
+
                     metadata = {
                         "text": clean_chunk,
                         "title": clean_text_for_metadata(request.title),
                         "source": request.source or "unknown",
                         "chunk_index": chunk_index,
                         "total_chunks": total_chunks,
+
+                        # Core tags
                         "tags": tags.get("tags", []),
-                        "detected_categories": tags.get("detected_categories", {}),
                         "primary_theme": tags.get("primary_theme", ""),
                         "consciousness_level": tags.get("consciousness_level", ""),
                         "emotions": tags.get("emotions", []),
+
+                        # Primary/individual fields (for simple queries)
                         "primary_chakra": tags.get("primary_chakra", ""),
                         "tradition": tags.get("tradition", ""),
                         "teacher": tags.get("teacher", ""),
                         "ascension_path": tags.get("ascension_path", ""),
                         "bridge_concept": tags.get("bridge_concept", ""),
                         "recovery_focus": tags.get("recovery_focus", ""),
-                        "healing_modality": tags.get("healing_modality", "")
+                        "healing_modality": tags.get("healing_modality", ""),
+
+                        # ALL detected categories as lists (for comprehensive queries & membership filtering)
+                        "all_chakras": detected_cats.get("chakras", []),
+                        "all_meridians": detected_cats.get("meridians", []),
+                        "all_12_steps": detected_cats.get("12_steps", []),
+                        "all_consciousness_levels": detected_cats.get("consciousness_level", []),
+                        "all_traditions": detected_cats.get("traditions", []),
+                        "all_teachers": detected_cats.get("teachers", []),
+                        "all_quantum_physics": detected_cats.get("quantum_physics", []),
+                        "all_quantum_particles": detected_cats.get("quantum_particles", []),
+                        "all_ascension_paths": detected_cats.get("ascension_paths", []),
+                        "all_bridge_concepts": detected_cats.get("bridge_concepts", []),
+                        "all_universal_laws": detected_cats.get("universal_laws", []),
+                        "all_healing_modalities": detected_cats.get("healing_modalities", []),
+                        "all_sacred_geometry": detected_cats.get("sacred_geometry", []),
+                        "all_subtle_bodies": detected_cats.get("subtle_bodies", []),
+                        "all_addiction_types": detected_cats.get("addiction_type", [])
                     }
 
                     # Add program_level only if detected (addiction-specific content)
