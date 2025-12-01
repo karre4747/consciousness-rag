@@ -283,6 +283,22 @@ def health_check():
         }
 
 
+def clean_text_for_metadata(text: str) -> str:
+    """
+    Clean text to ensure it can be safely encoded in UTF-8 for Pinecone metadata
+    Removes problematic characters that cause encoding issues
+    """
+    import re
+    # Remove replacement characters and other problematic Unicode
+    text = text.replace('\uFFFD', '')  # Replacement character
+    text = text.replace('\x00', '')  # Null character
+    # Remove control characters except newline, tab, carriage return
+    text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
+    # Ensure it's valid UTF-8
+    text = text.encode('utf-8', errors='ignore').decode('utf-8')
+    return text
+
+
 @app.post("/upload")
 async def upload_document(request: UploadRequest):
     """
@@ -318,12 +334,15 @@ async def upload_document(request: UploadRequest):
                 chunk_index = batch_start + i
 
                 try:
+                    # Clean chunk text to ensure UTF-8 compatibility
+                    clean_chunk = clean_text_for_metadata(chunk)
+
                     # Generate embedding
-                    embedding = generate_embedding(chunk)
+                    embedding = generate_embedding(clean_chunk)
 
                     # Generate tags (pass title for program_level detection and AI provider)
                     tags = generate_tags(
-                        chunk,
+                        clean_chunk,
                         use_ai=request.use_ai_tagging,
                         ai_provider=request.ai_provider,
                         title=request.title,
@@ -332,8 +351,8 @@ async def upload_document(request: UploadRequest):
 
                     # Create metadata with all enhanced tags
                     metadata = {
-                        "text": chunk,
-                        "title": request.title,
+                        "text": clean_chunk,
+                        "title": clean_text_for_metadata(request.title),
                         "source": request.source or "unknown",
                         "chunk_index": chunk_index,
                         "total_chunks": total_chunks,
