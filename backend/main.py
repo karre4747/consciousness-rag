@@ -285,17 +285,41 @@ def health_check():
 
 def clean_text_for_metadata(text: str) -> str:
     """
-    Clean text to ensure it can be safely encoded in UTF-8 for Pinecone metadata
-    Removes problematic characters that cause encoding issues
+    Clean text to ensure it can be safely encoded for Pinecone metadata
+    Converts all text to ASCII-safe characters to avoid encoding issues
     """
     import re
-    # Remove replacement characters and other problematic Unicode
+    import unicodedata
+
+    # Normalize Unicode to decomposed form, then recompose
+    text = unicodedata.normalize('NFKC', text)
+
+    # Remove replacement characters and null characters
     text = text.replace('\uFFFD', '')  # Replacement character
     text = text.replace('\x00', '')  # Null character
+
     # Remove control characters except newline, tab, carriage return
-    text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
-    # Ensure it's valid UTF-8
-    text = text.encode('utf-8', errors='ignore').decode('utf-8')
+    text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', '', text)
+
+    # Remove zero-width characters and other invisible characters
+    text = re.sub(r'[\u200B-\u200D\uFEFF]', '', text)
+
+    # Replace smart quotes and special characters with ASCII equivalents
+    replacements = {
+        '\u2018': "'",  # Left single quote
+        '\u2019': "'",  # Right single quote
+        '\u201C': '"',  # Left double quote
+        '\u201D': '"',  # Right double quote
+        '\u2013': '-',  # En dash
+        '\u2014': '-',  # Em dash
+        '\u2026': '...',  # Ellipsis
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    # Convert to ASCII, replacing non-ASCII characters
+    text = text.encode('ascii', errors='ignore').decode('ascii')
+
     return text
 
 
