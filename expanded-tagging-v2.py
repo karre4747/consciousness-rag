@@ -1,41 +1,19 @@
 #!/usr/bin/env python3
 """
-Evolve Consciousness Engine - Two-Pass Tagging System
-Pass 1: OpenAI GPT-3.5 for fast initial tagging (during upload)
-Pass 2: Claude for deep semantic analysis (background job)
-Updated: November 30, 2025
+Evolve Consciousness Engine - Expanded Tagging System v2.0
+Comprehensive tagging for consciousness, recovery, mysticism, quantum physics, and esoteric teachings
+Updated: November 13, 2025
 """
 
 from typing import Dict, Any, List
-import os
-from openai import OpenAI
-from anthropic import Anthropic
-
-# Initialize clients
-def get_openai_client():
-    """Get OpenAI client with API key from environment"""
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY not found in environment")
-    return OpenAI(api_key=api_key, base_url="https://api.openai.com/v1")
-
-def get_anthropic_client():
-    """Get Anthropic client with API key from environment"""
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY not found in environment")
-    return Anthropic(api_key=api_key)
 
 
-def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
-    """
-    Generate comprehensive consciousness and recovery tags using keyword matching
-    Based on expanded-tagging-v2.py - Full Evolve schema
-    """
+def generate_tags(text: str) -> Dict[str, Any]:
+    """Generate comprehensive consciousness and recovery tags"""
     tags = []
     detected_categories = {}
     text_lower = text.lower()
-
+    
     # === CHAKRAS & ENERGY CENTERS ===
     chakra_keywords = {
         "root": ["survival", "safety", "grounding", "security", "foundation", "muladhara", "fear", "stability"],
@@ -48,7 +26,7 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "soul_star": ["akashic", "higher self", "8th chakra", "karmic", "soul purpose"],
         "earth_star": ["grounding", "earth connection", "crystalline", "gaia", "ancestral"]
     }
-
+    
     # === MERIDIANS & ACUPUNCTURE POINTS ===
     meridian_keywords = {
         "lung": ["lung meridian", "grief", "letting go", "breath", "metal element", "po"],
@@ -64,7 +42,7 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "gallbladder": ["gallbladder", "decision making", "wood element", "courage"],
         "liver": ["liver meridian", "hun", "anger", "vision", "planning", "detox"]
     }
-
+    
     # === ADDICTION & RECOVERY SPECIFIC ===
     recovery_keywords = {
         "addiction_type": {
@@ -98,7 +76,7 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
             "step_12": ["spiritual awakening", "carry message", "practice principles"]
         }
     }
-
+    
     # === CONSCIOUSNESS LEVELS (Extended Hawkins Scale) ===
     consciousness_keywords = {
         "shame": ["shame", "humiliation", "worthless", "miserable", "20"],
@@ -119,7 +97,7 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "peace": ["peace", "tranquility", "transcendence", "600"],
         "enlightenment": ["enlightenment", "pure consciousness", "700-1000"]
     }
-
+    
     # === ESOTERIC TRADITIONS ===
     esoteric_keywords = {
         "hermetic": ["hermetic", "hermes", "thoth", "emerald tablet", "as above", "kybalion"],
@@ -136,8 +114,8 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "christian_mysticism": ["christian mystic", "contemplative", "desert fathers", "teresa of avila", "john of the cross"],
         "essene": ["essene", "dead sea scrolls", "qumran", "nazarene", "gnostic christianity"]
     }
-
-    # === ESOTERIC TEACHERS & PHILOSOPHERS ===
+    
+    # === ESOTERIC TEACHERS & PHILOSOPHERS (NEW) ===
     esoteric_teachers = {
         "leadbeater": ["leadbeater", "charles leadbeater", "clairvoyance", "thought forms", "chakras leadbeater", "occult chemistry"],
         "besant": ["annie besant", "besant", "theosophy", "ancient wisdom", "occult chemistry"],
@@ -159,7 +137,7 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "fillmore": ["myrtle fillmore", "charles fillmore", "unity", "affirmative prayer"],
         "fox": ["emmet fox", "sermon on the mount", "golden key", "mental equivalent"]
     }
-
+    
     # === QUANTUM & SCIENTIFIC ===
     quantum_keywords = {
         "quantum_physics": ["quantum", "quantum mechanics", "quantum field", "quantum theory"],
@@ -169,8 +147,8 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "epigenetics": ["epigenetic", "gene expression", "methylation", "generational trauma"],
         "biofield": ["biofield", "aura", "electromagnetic", "biophoton", "kirlian"]
     }
-
-    # === QUANTUM PARTICLES & CONCEPTS ===
+    
+    # === QUANTUM PARTICLES & CONCEPTS (NEW) ===
     quantum_particles = {
         "photons": ["photon", "light particle", "electromagnetic radiation", "biophoton", "light body"],
         "bosons": ["boson", "higgs", "higgs boson", "force carrier", "gauge boson"],
@@ -181,7 +159,7 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "wave_particle": ["wave-particle duality", "double slit", "complementarity"],
         "zero_point": ["zero point energy", "vacuum energy", "quantum vacuum", "casimir effect"]
     }
-
+    
     # === UNIVERSAL LAWS & PRINCIPLES ===
     universal_laws = {
         "law_of_one": ["law of one", "unity consciousness", "we are all one", "oneness"],
@@ -194,8 +172,8 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "law_of_gender": ["masculine feminine", "creation", "generation", "yin yang"],
         "law_of_mind": ["law of mind", "thought creates", "mental causation", "mind over matter"]
     }
-
-    # === COMPARATIVE MYSTICISM - ASCENSION PATHS ===
+    
+    # === COMPARATIVE MYSTICISM - ASCENSION PATHS (NEW) ===
     ascension_paths = {
         "12_step_ascension": ["12 steps", "spiritual awakening", "higher power", "recovery path", "step work", "addiction ascension"],
         "hindu_moksha": ["moksha", "liberation", "samadhi", "self-realization", "atman-brahman", "jivanmukta"],
@@ -207,8 +185,8 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "taoist_immortality": ["taoist immortality", "golden elixir", "inner alchemy", "neidan"],
         "yogic_samadhi": ["samadhi", "yoga", "raja yoga", "kundalini awakening", "siddhis"]
     }
-
-    # === CONSCIOUSNESS-MATTER BRIDGES ===
+    
+    # === CONSCIOUSNESS-MATTER BRIDGES (NEW) ===
     bridge_concepts = {
         "photon_consciousness": ["photon consciousness", "light as awareness", "biophoton field", "light body", "photon mind"],
         "chakra_sephiroth": ["chakra sephiroth", "energy center correspondence", "tree of life chakras"],
@@ -218,7 +196,7 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "neuroscience_mysticism": ["neuroscience mysticism", "brain and consciousness", "neural correlates"],
         "quantum_spirituality": ["quantum spirituality", "physics and consciousness", "science and mysticism"]
     }
-
+    
     # === HEALING MODALITIES ===
     healing_keywords = {
         "energy_healing": ["reiki", "pranic", "quantum touch", "healing hands", "energy work"],
@@ -229,14 +207,14 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "bodywork": ["massage", "rolfing", "craniosacral", "somatic", "feldenkrais"],
         "plant_medicine": ["ayahuasca", "psilocybin", "san pedro", "iboga", "cannabis", "sacred plants"]
     }
-
+    
     # === SACRED GEOMETRY ===
     sacred_geometry = {
         "patterns": ["flower of life", "metatron", "sri yantra", "golden ratio", "fibonacci", "vesica piscis"],
         "platonic_solids": ["tetrahedron", "cube", "octahedron", "dodecahedron", "icosahedron"],
         "symbols": ["ankh", "om", "yin yang", "pentagram", "hexagram", "cross", "spiral"]
     }
-
+    
     # === SUBTLE BODIES ===
     subtle_bodies = {
         "etheric": ["etheric body", "vital body", "energy double", "prana body"],
@@ -246,7 +224,7 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "buddhic": ["buddhic body", "intuitive body", "christ consciousness", "unity body"],
         "atmic": ["atmic body", "spiritual will", "divine purpose", "monadic"]
     }
-
+    
     # === PROCESS ALL CATEGORIES ===
     def check_keywords(category_dict, category_name):
         for key, keywords in category_dict.items():
@@ -255,7 +233,7 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
                     detected_categories[category_name] = []
                 detected_categories[category_name].append(key)
                 tags.extend(keywords[:3])  # Add first 3 keywords as tags
-
+    
     # Check all categories
     check_keywords(chakra_keywords, "chakras")
     check_keywords(meridian_keywords, "meridians")
@@ -264,16 +242,16 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
     check_keywords(recovery_keywords["12_steps"], "twelve_steps")
     check_keywords(consciousness_keywords, "consciousness_level")
     check_keywords(esoteric_keywords, "traditions")
-    check_keywords(esoteric_teachers, "teachers")
+    check_keywords(esoteric_teachers, "teachers")  # NEW
     check_keywords(quantum_keywords, "quantum_science")
-    check_keywords(quantum_particles, "quantum_particles")
+    check_keywords(quantum_particles, "quantum_particles")  # NEW
     check_keywords(universal_laws, "universal_laws")
-    check_keywords(ascension_paths, "ascension_paths")
-    check_keywords(bridge_concepts, "bridge_concepts")
+    check_keywords(ascension_paths, "ascension_paths")  # NEW
+    check_keywords(bridge_concepts, "bridge_concepts")  # NEW
     check_keywords(healing_keywords, "healing_modalities")
     check_keywords(sacred_geometry, "sacred_geometry")
     check_keywords(subtle_bodies, "subtle_bodies")
-
+    
     # === EMOTION DETECTION ===
     emotions = []
     emotion_keywords = {
@@ -286,278 +264,42 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "guilt": ["guilt", "remorse", "regret", "blame", "fault", "responsible"],
         "peace": ["peace", "calm", "serene", "tranquil", "centered", "balanced"]
     }
-
+    
     for emotion, keywords in emotion_keywords.items():
         if any(kw in text_lower for kw in keywords):
             emotions.append(emotion)
-
+    
     return {
         "tags": list(set(tags))[:50],  # Limit to 50 unique tags
-        "detected_categories": detected_categories,
+        "categories": detected_categories,
         "emotions": emotions,
-        "primary_chakra": detected_categories.get("chakras", [None])[0] if detected_categories.get("chakras") else None,
-        "consciousness_level": detected_categories.get("consciousness_level", ["neutrality"])[0] if detected_categories.get("consciousness_level") else "neutrality",
-        "tradition": detected_categories.get("traditions", [None])[0] if detected_categories.get("traditions") else None,
-        "teacher": detected_categories.get("teachers", [None])[0] if detected_categories.get("teachers") else None,
-        "ascension_path": detected_categories.get("ascension_paths", [None])[0] if detected_categories.get("ascension_paths") else None,
-        "bridge_concept": detected_categories.get("bridge_concepts", [None])[0] if detected_categories.get("bridge_concepts") else None,
-        "recovery_focus": detected_categories.get("addiction_type", [None])[0] if detected_categories.get("addiction_type") else None,
-        "healing_modality": detected_categories.get("healing_modalities", [None])[0] if detected_categories.get("healing_modalities") else None
+        "primary_chakra": detected_categories.get("chakras", [None])[0],
+        "consciousness_level": detected_categories.get("consciousness_level", ["neutrality"])[0],
+        "tradition": detected_categories.get("traditions", [None])[0],
+        "teacher": detected_categories.get("teachers", [None])[0],  # NEW
+        "ascension_path": detected_categories.get("ascension_paths", [None])[0],  # NEW
+        "bridge_concept": detected_categories.get("bridge_concepts", [None])[0],  # NEW
+        "recovery_focus": detected_categories.get("addiction_type", [None])[0],
+        "healing_modality": detected_categories.get("healing_modalities", [None])[0]
     }
 
 
-def generate_tags_ollama(text: str, model: str = "llama3.1") -> Dict[str, Any]:
+# === EXAMPLE USAGE ===
+if __name__ == "__main__":
+    # Test with a sample text
+    sample_text = """
+    Through the 12 Steps, we experience a spiritual awakening similar to moksha in Hinduism 
+    or devekut in Kabbalah. Modern quantum physics shows us that photons and consciousness 
+    are intimately connected, as Leadbeater and Besant discovered through their clairvoyant 
+    investigations in Occult Chemistry. The recovery path is an ascension path.
     """
-    Use Ollama (local LLM) for FREE tagging with semantic understanding
-    Requires Ollama running locally: brew install ollama && ollama pull llama3.1
-    """
-    import requests
-    import json
-
-    prompt = f"""Analyze this consciousness/spiritual text and identify relevant tags.
-
-Text (first 1500 chars):
-{text[:1500]}
-
-Return ONLY valid JSON with these fields:
-{{
-  "tags": ["chakra_heart", "quantum_physics", "step_1", "photon_consciousness", "moksha", etc],
-  "primary_theme": "one sentence summary",
-  "consciousness_level": "shame|fear|courage|acceptance|love|peace|enlightenment"
-}}
-
-Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies"""
-
-    try:
-        # Call local Ollama API
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {
-                    "temperature": 0.3,
-                    "num_predict": 300
-                }
-            },
-            timeout=60
-        )
-
-        if response.status_code == 200:
-            result = response.json()
-            response_text = result.get("response", "")
-
-            # Parse JSON response
-            try:
-                # Try to find JSON in response
-                start = response_text.find('{')
-                end = response_text.rfind('}') + 1
-                if start != -1 and end > start:
-                    ai_tags = json.loads(response_text[start:end])
-                    return ai_tags
-                else:
-                    return generate_tags_keyword_based(text)
-            except json.JSONDecodeError:
-                return generate_tags_keyword_based(text)
-        else:
-            print(f"Ollama API error: {response.status_code}, using keyword-based tags")
-            return generate_tags_keyword_based(text)
-
-    except requests.exceptions.ConnectionError:
-        print("Ollama not running. Start with: ollama serve")
-        return generate_tags_keyword_based(text)
-    except Exception as e:
-        print(f"Ollama tagging failed: {e}, using keyword-based tags")
-        return generate_tags_keyword_based(text)
-
-
-def generate_tags_openai(text: str, max_tokens: int = 300) -> Dict[str, Any]:
-    """
-    PASS 1: Use OpenAI GPT-3.5-turbo for fast, cheap initial tagging during upload
-    This replaces the expensive Claude call with a $0.50/1M token model
-    """
-
-    prompt = f"""Analyze this consciousness/spiritual text and identify relevant tags.
-
-Text (first 1500 chars):
-{text[:1500]}
-
-Return ONLY valid JSON with these fields:
-{{
-  "tags": ["chakra_heart", "quantum_physics", "step_1", "photon_consciousness", "moksha", etc],
-  "primary_theme": "one sentence summary",
-  "consciousness_level": "shame|fear|courage|acceptance|love|peace|enlightenment"
-}}
-
-Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies"""
-
-    try:
-        client = get_openai_client()
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=0.3
-        )
-
-        import json
-        response_text = response.choices[0].message.content
-
-        # Parse JSON response
-        try:
-            ai_tags = json.loads(response_text)
-            return ai_tags
-        except json.JSONDecodeError:
-            return generate_tags_keyword_based(text)
-
-    except Exception as e:
-        print(f"OpenAI tagging failed: {e}, using keyword-based tags")
-        return generate_tags_keyword_based(text)
-
-
-def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "ollama", title: str = "", ollama_model: str = "llama3.1") -> Dict[str, Any]:
-    """
-    Main tagging function combining keyword and AI tagging
-
-    Args:
-        text: Text to analyze
-        use_ai: Use AI enhancement (default: False for speed and FREE)
-        ai_provider: "ollama" (FREE, local) or "openai" (paid but faster) - default: "ollama"
-        title: Document title (used for program_level detection in addiction content)
-        ollama_model: Ollama model to use (default: "llama3.1")
-
-    Returns:
-        Dictionary with tags and metadata
-
-    Cost comparison:
-        - use_ai=False: FREE (keyword-based only)
-        - use_ai=True, ai_provider="ollama": FREE (runs locally)
-        - use_ai=True, ai_provider="openai": ~$0.40 per 1000 docs
-    """
-    # Always get keyword tags
-    keyword_tags = generate_tags_keyword_based(text)
-
-    # Detect program_level from filename for addiction-specific content
-    program_level = None
-    if title:
-        title_lower = title.lower()
-        if title_lower.startswith("beginner"):
-            program_level = "beginner"
-        elif title_lower.startswith("intermediate"):
-            program_level = "intermediate"
-        elif title_lower.startswith("advanced"):
-            program_level = "advanced"
-
-    if use_ai:
-        try:
-            # Choose AI provider
-            if ai_provider == "ollama":
-                ai_tags = generate_tags_ollama(text, model=ollama_model)
-            elif ai_provider == "openai":
-                ai_tags = generate_tags_openai(text)
-            else:
-                print(f"Unknown AI provider: {ai_provider}, using keyword-based tags")
-                ai_tags = {}
-
-            # Merge tags
-            all_tags = list(set(keyword_tags["tags"] + ai_tags.get("tags", [])))
-
-            result = {
-                "tags": all_tags,
-                "detected_categories": keyword_tags["detected_categories"],
-                "primary_theme": ai_tags.get("primary_theme", ""),
-                "consciousness_level": ai_tags.get("consciousness_level", keyword_tags.get("consciousness_level", "")),
-                "emotions": keyword_tags.get("emotions", []),
-                "primary_chakra": keyword_tags.get("primary_chakra"),
-                "tradition": keyword_tags.get("tradition"),
-                "teacher": keyword_tags.get("teacher"),
-                "ascension_path": keyword_tags.get("ascension_path"),
-                "bridge_concept": keyword_tags.get("bridge_concept"),
-                "recovery_focus": keyword_tags.get("recovery_focus"),
-                "healing_modality": keyword_tags.get("healing_modality")
-            }
-
-            # Only add program_level if detected from filename
-            if program_level:
-                result["program_level"] = program_level
-
-            return result
-        except Exception as e:
-            print(f"AI enhancement failed: {e}")
-            # Add program_level to keyword tags if detected
-            if program_level:
-                keyword_tags["program_level"] = program_level
-            return keyword_tags
-
-    # Add program_level to keyword tags if detected
-    if program_level:
-        keyword_tags["program_level"] = program_level
-    return keyword_tags
-
-
-def claude_second_pass_analysis(documents: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    PASS 2: Claude analyzes ALL documents together to find deep connections
-    Run this AFTER upload is complete, as a background job
-
-    Args:
-        documents: List of document dicts with {id, text, existing_tags}
-
-    Returns:
-        Dict with enhanced semantic connections and relationships
-    """
-
-    # Build context from all documents
-    context = "\n\n---\n\n".join([
-        f"DOC {i+1} [{doc.get('id')}]:\n{doc.get('text', '')[:500]}...\nCurrent tags: {doc.get('tags', [])}"
-        for i, doc in enumerate(documents[:20])  # Analyze up to 20 docs at once
-    ])
-
-    prompt = f"""You are analyzing a consciousness and spiritual transformation database.
-
-Review these {len(documents[:20])} documents and identify:
-1. Deep thematic connections across documents
-2. Quantum/consciousness patterns
-3. Cross-tradition synthesis opportunities
-4. Missing semantic relationships
-
-DOCUMENTS:
-{context}
-
-Return JSON:
-{{
-  "cross_document_themes": ["theme1", "theme2"],
-  "consciousness_patterns": ["pattern1", "pattern2"],
-  "suggested_connections": [
-    {{"doc_id": "id1", "relates_to": "id2", "connection": "why they connect"}},
-  ],
-  "synthesis_opportunities": ["opportunity1"]
-}}"""
-
-    try:
-        client = get_anthropic_client()
-        message = client.messages.create(
-            model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        import json
-        response_text = message.content[0].text
-
-        # Extract JSON from response
-        try:
-            # Try to find JSON in response
-            start = response_text.find('{')
-            end = response_text.rfind('}') + 1
-            if start != -1 and end > start:
-                analysis = json.loads(response_text[start:end])
-                return analysis
-            else:
-                return {"error": "No JSON found in response"}
-        except json.JSONDecodeError as e:
-            return {"error": f"JSON parse error: {str(e)}"}
-
-    except Exception as e:
-        return {"error": f"Claude analysis failed: {str(e)}"}
+    
+    result = generate_tags(sample_text)
+    
+    print("=== TAGGING RESULT ===")
+    print(f"\nDetected Categories: {result['categories']}")
+    print(f"\nAscension Path: {result['ascension_path']}")
+    print(f"\nTeacher: {result['teacher']}")
+    print(f"\nBridge Concept: {result['bridge_concept']}")
+    print(f"\nTraditions: {result['tradition']}")
+    print(f"\nTags (first 20): {result['tags'][:20]}")

@@ -23,6 +23,8 @@ from openai import OpenAI
 from anthropic import Anthropic
 import tiktoken
 from tagging import generate_tags
+from spending_tracker import SpendingTracker
+from cost_estimator import estimate_claude_cost
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +35,7 @@ pinecone_client = None
 openai_client = None
 anthropic_client = None
 index = None
+spending_tracker = SpendingTracker()  # Initialize spending tracker
 
 # Configuration
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "evolve-consciousness")
@@ -119,8 +122,9 @@ class UploadRequest(BaseModel):
     text: str
     title: str
     source: Optional[str] = None
-    program_level: Optional[str] = "beginner"
-    use_ai_tagging: Optional[bool] = False
+    use_ai_tagging: Optional[bool] = False  # Default to False (keyword-based, FREE)
+    ai_provider: Optional[str] = "ollama"  # "ollama" (FREE) or "openai" (paid)
+    ollama_model: Optional[str] = "llama3.1"  # Ollama model to use
 
 
 class QueryRequest(BaseModel):
@@ -293,23 +297,40 @@ async def upload_document(request: UploadRequest):
         for i, chunk in enumerate(chunks):
             # Generate embedding
             embedding = generate_embedding(chunk)
-            
-            # Generate tags
-            tags = generate_tags(chunk, use_ai=request.use_ai_tagging)
-            
-            # Create metadata
+
+            # Generate tags (pass title for program_level detection and AI provider)
+            tags = generate_tags(
+                chunk,
+                use_ai=request.use_ai_tagging,
+                ai_provider=request.ai_provider,
+                title=request.title,
+                ollama_model=request.ollama_model
+            )
+
+            # Create metadata with all enhanced tags
             metadata = {
                 "text": chunk,
                 "title": request.title,
                 "source": request.source or "unknown",
-                "program_level": request.program_level,
                 "chunk_index": i,
                 "total_chunks": len(chunks),
                 "tags": tags.get("tags", []),
                 "detected_categories": tags.get("detected_categories", {}),
                 "primary_theme": tags.get("primary_theme", ""),
-                "consciousness_level": tags.get("consciousness_level", "")
+                "consciousness_level": tags.get("consciousness_level", ""),
+                "emotions": tags.get("emotions", []),
+                "primary_chakra": tags.get("primary_chakra"),
+                "tradition": tags.get("tradition"),
+                "teacher": tags.get("teacher"),
+                "ascension_path": tags.get("ascension_path"),
+                "bridge_concept": tags.get("bridge_concept"),
+                "recovery_focus": tags.get("recovery_focus"),
+                "healing_modality": tags.get("healing_modality")
             }
+
+            # Add program_level only if detected (addiction-specific content)
+            if "program_level" in tags:
+                metadata["program_level"] = tags["program_level"]
             
             # Create vector ID
             vector_id = f"{request.title.replace(' ', '_')}_{i}"
@@ -414,7 +435,7 @@ def get_stats():
     """Get database statistics"""
     try:
         stats = index.describe_index_stats()
-        
+
         return {
             "index_name": PINECONE_INDEX_NAME,
             "total_vectors": stats.total_vector_count,
@@ -423,6 +444,149 @@ def get_stats():
         }
     except Exception as e:
         logger.error(f"Stats retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# === CLAUDE SPENDING TRACKING ENDPOINTS ===
+
+@app.get("/spending-dashboard")
+async def get_spending_dashboard(month: Optional[str] = None):
+    """
+    Get spending stats and history for current/specified month
+
+    Args:
+        month: Optional month in format "2025-11"
+
+    Returns:
+        Monthly stats and detailed history
+    """
+    try:
+        stats = spending_tracker.get_monthly_stats(month)
+        history = spending_tracker.get_monthly_history(month)
+
+        # Calculate estimated pages from tokens
+        total_pages = round(stats['total_input_tokens'] / 650) if stats['total_input_tokens'] else 0
+
+        return {
+            "status": "success",
+            "stats": {
+                **stats,
+                "estimated_pages_analyzed": total_pages,
+                "remaining_budget": round(stats['monthly_cap'] - stats['total_cost'], 2),
+                "budget_used_percentage": round(
+                    (stats['total_cost'] / stats['monthly_cap']) * 100, 1
+                ) if stats['monthly_cap'] > 0 else 0
+            },
+            "history": history
+        }
+
+    except Exception as e:
+        logger.error(f"Spending dashboard failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/update-spending-cap")
+async def update_spending_cap(request: Dict[str, float]):
+    """
+    Update monthly spending cap
+
+    Args:
+        request: {"new_cap": 40.00}
+    """
+    try:
+        new_cap = request.get("new_cap")
+
+        if new_cap is None or new_cap < 0:
+            raise HTTPException(status_code=400, detail="Cap must be a positive number")
+
+        spending_tracker.set_monthly_cap(new_cap)
+
+        return {
+            "status": "success",
+            "message": f"Monthly cap updated to ${new_cap}",
+            "new_cap": new_cap
+        }
+
+    except Exception as e:
+        logger.error(f"Update spending cap failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/estimate-analysis-cost")
+async def estimate_analysis_cost(request: Dict[str, Any]):
+    """
+    Calculate accurate cost BEFORE running Claude analysis
+
+    Args:
+        request: {
+            "analysis_type": "recent" | "full" | "theme",
+            "limit": 50 (for "recent"),
+            "filters": {...} (for "theme")
+        }
+
+    Returns:
+        Detailed cost estimate with budget check
+    """
+    try:
+        analysis_type = request.get("analysis_type", "recent")
+        limit = request.get("limit", 50)
+        filters = request.get("filters")
+
+        # Query Pinecone based on analysis type
+        # For now, we'll do a simple query - you can expand this later
+        # This is a placeholder that gets recent vectors
+        query_vector = [0.0] * PINECONE_DIMENSION
+
+        if analysis_type == "recent":
+            results = index.query(
+                vector=query_vector,
+                top_k=min(limit, 10000),
+                include_metadata=True
+            )
+        elif analysis_type == "full":
+            results = index.query(
+                vector=query_vector,
+                top_k=10000,  # Max we can get in one query
+                include_metadata=True
+            )
+        elif analysis_type == "theme":
+            results = index.query(
+                vector=query_vector,
+                top_k=10000,
+                include_metadata=True,
+                filter=filters or {}
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Invalid analysis_type")
+
+        # Calculate cost using actual token counts
+        documents = [{"metadata": match.metadata} for match in results.matches]
+
+        if not documents:
+            return {
+                "status": "success",
+                "estimate": {
+                    "total_documents": 0,
+                    "total_cost": 0,
+                    "message": "No documents found to analyze"
+                },
+                "budget": spending_tracker.can_afford(0)
+            }
+
+        estimate = estimate_claude_cost(documents, batch_size=15)
+
+        # Check budget
+        budget_check = spending_tracker.can_afford(estimate['total_cost'])
+
+        return {
+            "status": "success",
+            "estimate": estimate,
+            "budget": budget_check,
+            "analysis_type": analysis_type
+        }
+
+    except Exception as e:
+        logger.error(f"Cost estimation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
