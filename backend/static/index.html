@@ -707,6 +707,10 @@
                     reader.readAsText(file);
                 });
 
+                // Estimate size for user feedback
+                const sizeKB = Math.round(text.length / 1024);
+                console.log(`Processing ${file.name}: ${sizeKB} KB`);
+
                 const response = await fetch('/upload', {
                     method: 'POST',
                     headers: {
@@ -722,9 +726,20 @@
                     })
                 });
 
-                return response.ok;
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({detail: 'Unknown error'}));
+                    console.error(`Upload failed for ${file.name}:`, errorData);
+                    throw new Error(errorData.detail || 'Upload failed');
+                }
+
+                const result = await response.json();
+                console.log(`Upload success for ${file.name}:`, result);
+                return true;
+
             } catch (error) {
                 console.error('Upload error:', error);
+                // Show error in browser console for debugging
+                alert(`Failed to upload ${file.name}: ${error.message}\n\nCheck browser console for details.`);
                 return false;
             }
         }

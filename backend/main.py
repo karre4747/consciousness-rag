@@ -277,82 +277,107 @@ def health_check():
 async def upload_document(request: UploadRequest):
     """
     Upload and process a document for ingestion into the vector database
-    
+
     This endpoint:
     1. Chunks the document
     2. Generates embeddings for each chunk
     3. Generates metadata tags
-    4. Stores in Pinecone
+    4. Stores in Pinecone in batches (to handle large documents)
     """
     try:
         logger.info(f"Processing document: {request.title}")
-        
+
         # Chunk the text
         chunks = chunk_text(request.text)
-        logger.info(f"Created {len(chunks)} chunks")
-        
-        # Process each chunk
-        vectors_to_upsert = []
-        
-        for i, chunk in enumerate(chunks):
-            # Generate embedding
-            embedding = generate_embedding(chunk)
+        total_chunks = len(chunks)
+        logger.info(f"Created {total_chunks} chunks")
 
-            # Generate tags (pass title for program_level detection and AI provider)
-            tags = generate_tags(
-                chunk,
-                use_ai=request.use_ai_tagging,
-                ai_provider=request.ai_provider,
-                title=request.title,
-                ollama_model=request.ollama_model
-            )
+        # Process in batches to handle large documents
+        BATCH_SIZE = 50  # Process 50 chunks at a time
+        total_uploaded = 0
 
-            # Create metadata with all enhanced tags
-            metadata = {
-                "text": chunk,
-                "title": request.title,
-                "source": request.source or "unknown",
-                "chunk_index": i,
-                "total_chunks": len(chunks),
-                "tags": tags.get("tags", []),
-                "detected_categories": tags.get("detected_categories", {}),
-                "primary_theme": tags.get("primary_theme", ""),
-                "consciousness_level": tags.get("consciousness_level", ""),
-                "emotions": tags.get("emotions", []),
-                "primary_chakra": tags.get("primary_chakra"),
-                "tradition": tags.get("tradition"),
-                "teacher": tags.get("teacher"),
-                "ascension_path": tags.get("ascension_path"),
-                "bridge_concept": tags.get("bridge_concept"),
-                "recovery_focus": tags.get("recovery_focus"),
-                "healing_modality": tags.get("healing_modality")
-            }
+        for batch_start in range(0, total_chunks, BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, total_chunks)
+            batch_chunks = chunks[batch_start:batch_end]
 
-            # Add program_level only if detected (addiction-specific content)
-            if "program_level" in tags:
-                metadata["program_level"] = tags["program_level"]
-            
-            # Create vector ID
-            vector_id = f"{request.title.replace(' ', '_')}_{i}"
-            
-            vectors_to_upsert.append({
-                "id": vector_id,
-                "values": embedding,
-                "metadata": metadata
-            })
-        
-        # Upsert to Pinecone
-        index.upsert(vectors=vectors_to_upsert)
-        
-        logger.info(f"Successfully uploaded {len(vectors_to_upsert)} vectors")
-        
+            logger.info(f"Processing batch {batch_start}-{batch_end} of {total_chunks}")
+
+            vectors_to_upsert = []
+
+            for i, chunk in enumerate(batch_chunks):
+                chunk_index = batch_start + i
+
+                try:
+                    # Generate embedding
+                    embedding = generate_embedding(chunk)
+
+                    # Generate tags (pass title for program_level detection and AI provider)
+                    tags = generate_tags(
+                        chunk,
+                        use_ai=request.use_ai_tagging,
+                        ai_provider=request.ai_provider,
+                        title=request.title,
+                        ollama_model=request.ollama_model
+                    )
+
+                    # Create metadata with all enhanced tags
+                    metadata = {
+                        "text": chunk,
+                        "title": request.title,
+                        "source": request.source or "unknown",
+                        "chunk_index": chunk_index,
+                        "total_chunks": total_chunks,
+                        "tags": tags.get("tags", []),
+                        "detected_categories": tags.get("detected_categories", {}),
+                        "primary_theme": tags.get("primary_theme", ""),
+                        "consciousness_level": tags.get("consciousness_level", ""),
+                        "emotions": tags.get("emotions", []),
+                        "primary_chakra": tags.get("primary_chakra"),
+                        "tradition": tags.get("tradition"),
+                        "teacher": tags.get("teacher"),
+                        "ascension_path": tags.get("ascension_path"),
+                        "bridge_concept": tags.get("bridge_concept"),
+                        "recovery_focus": tags.get("recovery_focus"),
+                        "healing_modality": tags.get("healing_modality")
+                    }
+
+                    # Add program_level only if detected (addiction-specific content)
+                    if "program_level" in tags:
+                        metadata["program_level"] = tags["program_level"]
+
+                    # Create vector ID
+                    vector_id = f"{request.title.replace(' ', '_')}_{chunk_index}"
+
+                    vectors_to_upsert.append({
+                        "id": vector_id,
+                        "values": embedding,
+                        "metadata": metadata
+                    })
+
+                except Exception as chunk_error:
+                    logger.error(f"Error processing chunk {chunk_index}: {chunk_error}")
+                    # Continue processing other chunks even if one fails
+                    continue
+
+            # Upsert batch to Pinecone
+            if vectors_to_upsert:
+                try:
+                    index.upsert(vectors=vectors_to_upsert)
+                    total_uploaded += len(vectors_to_upsert)
+                    logger.info(f"Uploaded batch: {len(vectors_to_upsert)} vectors (total: {total_uploaded}/{total_chunks})")
+                except Exception as upsert_error:
+                    logger.error(f"Error upserting batch: {upsert_error}")
+                    raise HTTPException(status_code=500, detail=f"Failed to upload batch: {str(upsert_error)}")
+
+        logger.info(f"Successfully uploaded {total_uploaded} vectors")
+
         return {
             "status": "success",
             "message": f"Document '{request.title}' processed successfully",
-            "chunks_created": len(chunks),
-            "vectors_uploaded": len(vectors_to_upsert)
+            "chunks_created": total_chunks,
+            "vectors_uploaded": total_uploaded
         }
-        
+
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
