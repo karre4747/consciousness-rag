@@ -451,6 +451,240 @@
             padding: 40px;
             color: #999;
         }
+
+        /* Research Assistant Section */
+        .research-section {
+            background: linear-gradient(135deg, #f8f9ff 0%, #fff9f5 100%);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .research-section h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 1.8em;
+        }
+
+        .research-subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 1.05em;
+        }
+
+        .query-form {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #555;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 1em;
+        }
+
+        .query-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.3s ease;
+        }
+
+        .query-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .query-select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            font-family: inherit;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .query-select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .ask-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.15em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .ask-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .ask-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Loading Spinner */
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 30px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        /* Answer Container */
+        .answer-container {
+            display: none;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-top: 25px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .answer-header {
+            color: #667eea;
+            font-size: 1.4em;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .answer-text {
+            color: #333;
+            font-size: 1.05em;
+            line-height: 1.8;
+            margin-bottom: 30px;
+            white-space: pre-wrap;
+        }
+
+        .sources-section {
+            margin-top: 30px;
+        }
+
+        .sources-header {
+            color: #555;
+            font-size: 1.2em;
+            font-weight: 700;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .source-card {
+            background: linear-gradient(135deg, #f8f9ff 0%, #fff9f5 100%);
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .source-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+        }
+
+        .source-title {
+            color: #667eea;
+            font-weight: 700;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        .source-excerpt {
+            color: #555;
+            font-size: 0.95em;
+            line-height: 1.6;
+            margin-bottom: 12px;
+            font-style: italic;
+        }
+
+        .source-metadata {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .metadata-tag {
+            background: white;
+            color: #667eea;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: 600;
+            border: 1px solid #e0e0f0;
+        }
+
+        .error-message {
+            background: #fff5f5;
+            border-left: 4px solid #ff6b6b;
+            color: #d63031;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -558,6 +792,60 @@
             <div class="docs-list" id="docsList">
                 <div class="loading">Loading documents...</div>
             </div>
+        </div>
+
+        <!-- Research Assistant Section -->
+        <div class="research-section" id="researchSection">
+            <h3>🔮 Research Assistant</h3>
+            <p class="research-subtitle">Query the consciousness library for course research</p>
+
+            <div class="query-form">
+                <div class="form-group">
+                    <label for="queryQuestion">Your Question</label>
+                    <textarea
+                        id="queryQuestion"
+                        class="query-textarea"
+                        placeholder="Examples:&#10;• What are the key principles of the 12 steps?&#10;• How do chakras relate to spiritual awakening?&#10;• What do mystical traditions say about consciousness?&#10;• Explain the connection between astrology and personal transformation"
+                    ></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="focusArea">Focus Area (Optional)</label>
+                    <select id="focusArea" class="query-select">
+                        <option value="">All Topics</option>
+                        <option value="12-step">12-Step Recovery</option>
+                        <option value="mystical">Mystical Traditions</option>
+                        <option value="chakras">Chakras & Energy</option>
+                        <option value="astrology">Astrology</option>
+                    </select>
+                </div>
+
+                <button class="ask-btn" id="askBtn" onclick="askQuestion()">
+                    Ask Question
+                </button>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div class="loading-spinner" id="loadingSpinner">
+                <div class="spinner"></div>
+                <div class="loading-text">Searching the consciousness library...</div>
+            </div>
+
+            <!-- Answer Container -->
+            <div class="answer-container" id="answerContainer">
+                <div class="answer-header">Answer</div>
+                <div class="answer-text" id="answerText"></div>
+
+                <div class="sources-section">
+                    <div class="sources-header">
+                        📖 Sources
+                    </div>
+                    <div id="sourcesContainer"></div>
+                </div>
+            </div>
+
+            <!-- Error Message -->
+            <div id="errorMessage"></div>
         </div>
     </div>
 
@@ -888,6 +1176,202 @@
         // Initialize on page load
         window.addEventListener('DOMContentLoaded', () => {
             loadDocumentList();
+        });
+
+        // ========================================
+        // RESEARCH ASSISTANT / QUERY INTERFACE
+        // ========================================
+
+        /**
+         * Main function to ask a question to the consciousness database
+         * Calls the /query endpoint and displays formatted results
+         */
+        async function askQuestion() {
+            const questionInput = document.getElementById('queryQuestion');
+            const focusArea = document.getElementById('focusArea').value;
+            const askBtn = document.getElementById('askBtn');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const answerContainer = document.getElementById('answerContainer');
+            const errorMessage = document.getElementById('errorMessage');
+
+            const question = questionInput.value.trim();
+
+            // Validation
+            if (!question) {
+                showError('Please enter a question');
+                return;
+            }
+
+            // Reset UI
+            askBtn.disabled = true;
+            loadingSpinner.style.display = 'block';
+            answerContainer.style.display = 'none';
+            errorMessage.innerHTML = '';
+
+            try {
+                // Build request payload
+                const payload = {
+                    question: question,
+                    top_k: 5  // Request top 5 relevant sources
+                };
+
+                // Add focus area filter if selected
+                if (focusArea) {
+                    payload.filters = {
+                        focus_area: focusArea
+                    };
+                }
+
+                console.log('Sending query:', payload);
+
+                // Call the /query endpoint
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({detail: 'Query failed'}));
+                    throw new Error(errorData.detail || `Server error: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log('Query result:', result);
+
+                // Display the results
+                displayAnswer(result);
+
+            } catch (error) {
+                console.error('Query error:', error);
+                showError(`Failed to process query: ${error.message}`);
+            } finally {
+                askBtn.disabled = false;
+                loadingSpinner.style.display = 'none';
+            }
+        }
+
+        /**
+         * Display the answer and sources in a formatted way
+         */
+        function displayAnswer(result) {
+            const answerContainer = document.getElementById('answerContainer');
+            const answerText = document.getElementById('answerText');
+            const sourcesContainer = document.getElementById('sourcesContainer');
+
+            // Check if we have an answer
+            if (!result.answer) {
+                showError('No answer received from the server');
+                return;
+            }
+
+            // Display the answer text
+            answerText.textContent = result.answer;
+
+            // Display sources if available
+            if (result.sources && result.sources.length > 0) {
+                sourcesContainer.innerHTML = result.sources.map((source, index) => {
+                    return createSourceCard(source, index + 1);
+                }).join('');
+            } else {
+                sourcesContainer.innerHTML = '<div class="no-results">No sources found</div>';
+            }
+
+            // Show the answer container with animation
+            answerContainer.style.display = 'block';
+
+            // Scroll to answer
+            setTimeout(() => {
+                answerContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 100);
+        }
+
+        /**
+         * Create an HTML card for a single source with metadata
+         */
+        function createSourceCard(source, index) {
+            // Extract excerpt (first 200 characters of text)
+            const excerpt = source.text
+                ? (source.text.length > 200
+                    ? source.text.substring(0, 200) + '...'
+                    : source.text)
+                : 'No text available';
+
+            // Build metadata tags
+            let metadataTags = '';
+
+            if (source.metadata) {
+                const metadata = source.metadata;
+
+                // Add all_traditions tags
+                if (metadata.all_traditions && metadata.all_traditions.length > 0) {
+                    metadata.all_traditions.forEach(tradition => {
+                        metadataTags += `<span class="metadata-tag">🕉️ ${escapeHtml(tradition)}</span>`;
+                    });
+                }
+
+                // Add all_teachers tags
+                if (metadata.all_teachers && metadata.all_teachers.length > 0) {
+                    metadata.all_teachers.forEach(teacher => {
+                        metadataTags += `<span class="metadata-tag">👤 ${escapeHtml(teacher)}</span>`;
+                    });
+                }
+
+                // Add all_chakras tags
+                if (metadata.all_chakras && metadata.all_chakras.length > 0) {
+                    metadata.all_chakras.forEach(chakra => {
+                        metadataTags += `<span class="metadata-tag">⚡ ${escapeHtml(chakra)}</span>`;
+                    });
+                }
+
+                // Add any other metadata fields
+                Object.keys(metadata).forEach(key => {
+                    if (!['all_traditions', 'all_teachers', 'all_chakras'].includes(key)) {
+                        const value = metadata[key];
+                        if (value && typeof value === 'string') {
+                            metadataTags += `<span class="metadata-tag">🏷️ ${escapeHtml(key)}: ${escapeHtml(value)}</span>`;
+                        } else if (Array.isArray(value) && value.length > 0) {
+                            value.forEach(item => {
+                                metadataTags += `<span class="metadata-tag">🏷️ ${escapeHtml(key)}: ${escapeHtml(item)}</span>`;
+                            });
+                        }
+                    }
+                });
+            }
+
+            return `
+                <div class="source-card">
+                    <div class="source-title">
+                        ${index}. ${escapeHtml(source.title || 'Untitled Document')}
+                    </div>
+                    <div class="source-excerpt">
+                        "${escapeHtml(excerpt)}"
+                    </div>
+                    ${metadataTags ? `<div class="source-metadata">${metadataTags}</div>` : ''}
+                </div>
+            `;
+        }
+
+        /**
+         * Display an error message to the user
+         */
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.innerHTML = `
+                <div class="error-message">
+                    ⚠️ ${escapeHtml(message)}
+                </div>
+            `;
+        }
+
+        // Allow Enter key to submit (Shift+Enter for new line)
+        document.getElementById('queryQuestion').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                askQuestion();
+            }
         });
     </script>
 </body>
