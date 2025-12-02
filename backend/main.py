@@ -323,6 +323,33 @@ def clean_text_for_metadata(text: str) -> str:
     return text
 
 
+def clean_metadata_for_pinecone(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Clean metadata dictionary to ensure all values are Pinecone-compatible
+    Converts None to empty strings, ensures lists are lists, etc.
+    """
+    cleaned = {}
+
+    for key, value in metadata.items():
+        if value is None:
+            # Convert None to empty string or empty list based on key
+            if key.startswith('all_') or key in ['tags', 'emotions']:
+                cleaned[key] = []
+            else:
+                cleaned[key] = ""
+        elif isinstance(value, list):
+            # Ensure lists contain only strings
+            cleaned[key] = [str(item) if item is not None else "" for item in value]
+        elif isinstance(value, (str, int, float, bool)):
+            # Keep strings, numbers, booleans as-is
+            cleaned[key] = value
+        else:
+            # Convert anything else to string
+            cleaned[key] = str(value)
+
+    return cleaned
+
+
 @app.post("/upload")
 async def upload_document(request: UploadRequest):
     """
@@ -420,6 +447,9 @@ async def upload_document(request: UploadRequest):
                     # Add program_level only if detected (addiction-specific content)
                     if "program_level" in tags:
                         metadata["program_level"] = tags["program_level"]
+
+                    # Clean metadata for Pinecone compatibility (convert None to empty strings)
+                    metadata = clean_metadata_for_pinecone(metadata)
 
                     # Create vector ID
                     vector_id = f"{request.title.replace(' ', '_')}_{chunk_index}"
