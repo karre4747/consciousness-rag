@@ -18,7 +18,7 @@ if sys.stderr.encoding != 'utf-8':
 
 load_dotenv(override=True)  # Override system environment variables
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -188,11 +188,25 @@ def generate_embedding(text: str) -> List[float]:
 def generate_answer(question: str, context_chunks: List[Dict[str, Any]], program_level: str = "beginner") -> str:
     """Generate answer using Claude with retrieved context"""
     
-    # Build context from retrieved chunks
-    context = "\n\n".join([
-        f"[Source: {chunk['metadata'].get('title', 'Unknown')}]\n{chunk['metadata'].get('text', '')}"
-        for chunk in context_chunks
-    ])
+    # Build context from retrieved chunks (with safety checks for Pinecone match objects)
+    context_parts = []
+    for chunk in context_chunks:
+        # Handle Pinecone match objects (they have .metadata attribute, not dict key)
+        if hasattr(chunk, 'metadata'):
+            metadata = chunk.metadata
+        elif isinstance(chunk, dict):
+            metadata = chunk.get('metadata', {})
+        else:
+            continue  # Skip invalid chunks
+        
+        # Safely extract title and text
+        title = metadata.get('title', 'Unknown') if hasattr(metadata, 'get') else getattr(metadata, 'title', 'Unknown')
+        text = metadata.get('text', '') if hasattr(metadata, 'get') else getattr(metadata, 'text', '')
+        
+        if text:  # Only add non-empty chunks
+            context_parts.append(f"[Source: {title}]\n{text}")
+    
+    context = "\n\n".join(context_parts) if context_parts else "No context available."
     
     # Persona based on program level
     personas = {
@@ -364,6 +378,13 @@ async def upload_document(request: UploadRequest):
     try:
         logger.info(f"Processing document: {request.title}")
 
+        # Validate input
+        if not request.text or not request.text.strip():
+            raise HTTPException(status_code=400, detail="Text cannot be empty")
+        
+        if not request.title or not request.title.strip():
+            raise HTTPException(status_code=400, detail="Title cannot be empty")
+
         # Chunk the text
         chunks = chunk_text(request.text)
         total_chunks = len(chunks)
@@ -451,8 +472,10 @@ async def upload_document(request: UploadRequest):
                     # Clean metadata for Pinecone compatibility (convert None to empty strings)
                     metadata = clean_metadata_for_pinecone(metadata)
 
-                    # Create vector ID
-                    vector_id = f"{request.title.replace(' ', '_')}_{chunk_index}"
+                    # Create vector ID (sanitize title to avoid special characters)
+                    import re
+                    safe_title = re.sub(r'[^a-zA-Z0-9_-]', '_', request.title)
+                    vector_id = f"{safe_title}_{chunk_index}"
 
                     vectors_to_upsert.append({
                         "id": vector_id,

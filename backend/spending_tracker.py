@@ -5,7 +5,7 @@ Track Claude API spending with monthly caps
 
 import sqlite3
 from datetime import datetime, date
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "claude_spending.db")
@@ -99,7 +99,7 @@ class SpendingTracker:
 
             conn.commit()
 
-    def can_afford(self, estimated_cost: float) -> Dict[str, any]:
+    def can_afford(self, estimated_cost: float) -> Dict[str, Any]:
         """
         Check if we can afford this analysis within monthly cap
 
