@@ -558,13 +558,23 @@ async def query_knowledge(request: QueryRequest):
             request.program_level or "beginner"
         )
         
-        # Format sources
+        # Format sources with full text and metadata for UI display
         sources = [
             {
                 "title": match.metadata.get("title", "Unknown"),
                 "source": match.metadata.get("source", "Unknown"),
+                "text": match.metadata.get("text", ""),
                 "score": match.score,
-                "tags": match.metadata.get("tags", [])
+                "tags": match.metadata.get("tags", []),
+                "metadata": {
+                    "all_traditions": match.metadata.get("all_traditions", []),
+                    "all_teachers": match.metadata.get("all_teachers", []),
+                    "all_chakras": match.metadata.get("all_chakras", []),
+                    "all_12_steps": match.metadata.get("all_12_steps", []),
+                    "all_ascension_paths": match.metadata.get("all_ascension_paths", []),
+                    "primary_theme": match.metadata.get("primary_theme", ""),
+                    "consciousness_level": match.metadata.get("consciousness_level", ""),
+                }
             }
             for match in matches
         ]
