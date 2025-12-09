@@ -11,29 +11,95 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --royal-purple: #6B2C91;
+            --deep-purple: #4A148C;
+            --bright-purple: #B794F6;
+            --fluorescent-purple: #D946EF;
+            --deep-green: #0F5132;
+            --rich-green: #157347;
+            --emerald-green: #20C997;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--deep-purple) 0%, var(--royal-purple) 100%);
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             padding: 20px;
         }
 
         .container {
             background: white;
             border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 800px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            max-width: 1400px;
             width: 100%;
-            padding: 40px;
+            margin: 0 auto;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--deep-purple) 0%, var(--royal-purple) 100%);
+            color: white;
+            padding: 30px 40px;
+            text-align: center;
         }
 
         h1 {
-            color: #667eea;
+            color: var(--bright-purple);
             margin-bottom: 10px;
-            font-size: 2em;
+            font-size: 2.2em;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 0;
+            font-size: 1.1em;
+        }
+
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex;
+            background: var(--deep-purple);
+            border-bottom: 3px solid var(--bright-purple);
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 18px 24px;
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.7);
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+            color: var(--bright-purple);
+            background: rgba(183, 148, 246, 0.1);
+        }
+
+        .tab-btn.active {
+            color: var(--fluorescent-purple);
+            border-bottom-color: var(--fluorescent-purple);
+            background: rgba(217, 70, 239, 0.1);
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px 40px;
+            min-height: 500px;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         .subtitle {
@@ -47,25 +113,27 @@
         }
 
         .drop-zone {
-            border: 3px dashed #667eea;
+            border: 3px dashed var(--royal-purple);
             border-radius: 15px;
             padding: 60px 20px;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
-            background: #f8f9ff;
+            background: linear-gradient(135deg, rgba(107, 44, 145, 0.05) 0%, rgba(74, 20, 140, 0.05) 100%);
         }
 
         .drop-zone:hover, .drop-zone.dragover {
-            border-color: #764ba2;
-            background: #f0f2ff;
+            border-color: var(--fluorescent-purple);
+            background: linear-gradient(135deg, rgba(217, 70, 239, 0.1) 0%, rgba(183, 148, 246, 0.1) 100%);
             transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(217, 70, 239, 0.3);
         }
 
         .drop-zone-text {
             font-size: 1.2em;
-            color: #667eea;
+            color: var(--royal-purple);
             margin-bottom: 10px;
+            font-weight: 600;
         }
 
         .drop-zone-subtext {
@@ -130,8 +198,9 @@
         }
 
         .status-success {
-            background: #55efc4;
-            color: #00b894;
+            background: var(--emerald-green);
+            color: var(--deep-green);
+            font-weight: 700;
         }
 
         .status-error {
@@ -142,20 +211,22 @@
         .upload-btn {
             width: 100%;
             padding: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: linear-gradient(135deg, var(--royal-purple) 0%, var(--deep-purple) 100%);
+            color: var(--bright-purple);
             border: none;
             border-radius: 10px;
             font-size: 1.1em;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.3s ease;
             margin-top: 20px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
 
         .upload-btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 10px 25px rgba(107, 44, 145, 0.5);
+            background: linear-gradient(135deg, var(--fluorescent-purple) 0%, var(--royal-purple) 100%);
         }
 
         .upload-btn:disabled {
@@ -211,17 +282,20 @@
 
         /* Spending Dashboard Styles */
         .spending-dashboard {
-            background: linear-gradient(135deg, #f8f9ff 0%, #fff5f5 100%);
+            background: linear-gradient(135deg, rgba(107, 44, 145, 0.08) 0%, rgba(15, 81, 50, 0.08) 100%);
+            border: 2px solid var(--royal-purple);
             border-radius: 15px;
             padding: 25px;
-            margin: 30px 0;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            margin: 20px 0;
+            box-shadow: 0 5px 20px rgba(107, 44, 145, 0.2);
         }
 
         .spending-dashboard h3 {
-            color: #667eea;
+            color: var(--royal-purple);
             margin-bottom: 20px;
             text-align: center;
+            font-weight: 700;
+            font-size: 1.4em;
         }
 
         .spending-summary {
@@ -245,8 +319,9 @@
         .stat-number {
             font-size: 2em;
             font-weight: 700;
-            color: #667eea;
+            color: var(--royal-purple);
             margin-bottom: 5px;
+            text-shadow: 0 1px 2px rgba(107, 44, 145, 0.2);
         }
 
         .stat-label {
@@ -256,17 +331,22 @@
 
         .small-btn {
             margin-top: 10px;
-            padding: 5px 15px;
-            background: #667eea;
-            color: white;
-            border: none;
+            padding: 6px 16px;
+            background: var(--royal-purple);
+            color: var(--bright-purple);
+            border: 2px solid var(--royal-purple);
             border-radius: 15px;
             cursor: pointer;
-            font-size: 0.8em;
+            font-size: 0.85em;
+            font-weight: 600;
+            transition: all 0.2s ease;
         }
 
         .small-btn:hover {
-            background: #764ba2;
+            background: var(--fluorescent-purple);
+            border-color: var(--fluorescent-purple);
+            color: white;
+            transform: translateY(-1px);
         }
 
         .spending-details {
@@ -281,21 +361,23 @@
 
         .secondary-btn {
             background: white;
-            border: 2px solid #667eea;
-            color: #667eea;
-            padding: 10px 25px;
+            border: 2px solid var(--royal-purple);
+            color: var(--royal-purple);
+            padding: 12px 28px;
             border-radius: 25px;
             cursor: pointer;
             font-size: 1em;
-            font-weight: 600;
+            font-weight: 700;
             display: block;
             margin: 20px auto;
             transition: all 0.3s ease;
         }
 
         .secondary-btn:hover {
-            background: #667eea;
-            color: white;
+            background: var(--royal-purple);
+            color: var(--bright-purple);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(107, 44, 145, 0.4);
         }
 
         /* Modal Styles */
@@ -362,9 +444,11 @@
         }
 
         .uploaded-docs-section h3 {
-            color: #667eea;
+            color: var(--royal-purple);
             margin-bottom: 20px;
             text-align: center;
+            font-weight: 700;
+            font-size: 1.6em;
         }
 
         .docs-controls {
@@ -463,17 +547,28 @@
 
         /* Analysis Section */
         .analysis-section {
-            background: linear-gradient(135deg, #f8f9ff 0%, #f5f9ff 100%);
+            background: linear-gradient(135deg, rgba(107, 44, 145, 0.08) 0%, rgba(74, 20, 140, 0.08) 100%);
+            border: 2px solid var(--royal-purple);
             border-radius: 15px;
             padding: 25px;
-            margin: 30px 0;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+            margin: 20px 0;
+            box-shadow: 0 5px 20px rgba(107, 44, 145, 0.2);
         }
 
         .analysis-section h3 {
-            color: #667eea;
+            color: var(--royal-purple);
             margin-bottom: 10px;
             text-align: center;
+            font-weight: 700;
+            font-size: 1.5em;
+            text-shadow: 0 1px 2px rgba(107, 44, 145, 0.2);
+        }
+
+        .research-subtitle {
+            color: var(--deep-purple);
+            text-align: center;
+            margin-bottom: 20px;
+            font-weight: 500;
         }
 
         .analysis-actions {
@@ -485,28 +580,34 @@
         }
 
         .analysis-btn {
-            padding: 10px 18px;
-            border: none;
+            padding: 12px 20px;
+            border: 2px solid var(--royal-purple);
             border-radius: 10px;
-            background: #667eea;
-            color: white;
-            font-weight: 600;
+            background: var(--royal-purple);
+            color: var(--bright-purple);
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.2s ease;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
 
         .analysis-btn:hover {
-            background: #764ba2;
-            transform: translateY(-1px);
+            background: var(--fluorescent-purple);
+            border-color: var(--fluorescent-purple);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(217, 70, 239, 0.4);
         }
 
         .analysis-status {
-            background: #f8f9ff;
+            background: rgba(107, 44, 145, 0.1);
+            border-left: 4px solid var(--royal-purple);
             border-radius: 10px;
             padding: 12px 15px;
             margin-top: 10px;
-            color: #555;
+            color: var(--deep-purple);
             font-size: 0.95em;
+            font-weight: 500;
         }
 
         .analysis-results {
@@ -518,10 +619,11 @@
         }
 
         .research-section h3 {
-            color: #667eea;
+            color: var(--royal-purple);
             margin-bottom: 10px;
             text-align: center;
             font-size: 1.8em;
+            font-weight: 700;
         }
 
         .research-subtitle {
@@ -590,20 +692,22 @@
         .ask-btn {
             width: 100%;
             padding: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: linear-gradient(135deg, var(--royal-purple) 0%, var(--deep-purple) 100%);
+            color: var(--bright-purple);
             border: none;
             border-radius: 10px;
             font-size: 1.15em;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.3s ease;
             margin-top: 10px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
 
         .ask-btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 10px 25px rgba(107, 44, 145, 0.5);
+            background: linear-gradient(135deg, var(--fluorescent-purple) 0%, var(--royal-purple) 100%);
         }
 
         .ask-btn:disabled {
@@ -656,12 +760,12 @@
         }
 
         .answer-header {
-            color: #667eea;
+            color: var(--royal-purple);
             font-size: 1.4em;
             font-weight: 700;
             margin-bottom: 20px;
             padding-bottom: 15px;
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 3px solid var(--royal-purple);
         }
 
         .answer-text {
@@ -687,8 +791,8 @@
         }
 
         .source-card {
-            background: linear-gradient(135deg, #f8f9ff 0%, #fff9f5 100%);
-            border-left: 4px solid #667eea;
+            background: linear-gradient(135deg, rgba(107, 44, 145, 0.05) 0%, rgba(15, 81, 50, 0.05) 100%);
+            border-left: 4px solid var(--royal-purple);
             border-radius: 8px;
             padding: 20px;
             margin-bottom: 15px;
@@ -697,11 +801,12 @@
 
         .source-card:hover {
             transform: translateX(5px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+            box-shadow: 0 5px 15px rgba(107, 44, 145, 0.3);
+            border-left-color: var(--fluorescent-purple);
         }
 
         .source-title {
-            color: #667eea;
+            color: var(--royal-purple);
             font-weight: 700;
             font-size: 1.1em;
             margin-bottom: 10px;
@@ -724,12 +829,12 @@
 
         .metadata-tag {
             background: white;
-            color: #667eea;
+            color: var(--royal-purple);
             padding: 5px 12px;
             border-radius: 15px;
             font-size: 0.85em;
             font-weight: 600;
-            border: 1px solid #e0e0f0;
+            border: 2px solid var(--royal-purple);
         }
 
         .error-message {
@@ -745,10 +850,23 @@
 </head>
 <body>
     <div class="container">
-        <h1>Evolve Consciousness Engine</h1>
-        <p class="subtitle">Upload your consciousness, recovery, and spiritual content</p>
+        <div class="header">
+            <h1>Evolve Consciousness Engine</h1>
+            <p class="subtitle">Upload your consciousness, recovery, and spiritual content</p>
+        </div>
 
-        <div class="upload-section">
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('upload', event)">📤 Upload</button>
+            <button class="tab-btn" onclick="switchTab('tagging', event)">🏷️ Tagging</button>
+            <button class="tab-btn" onclick="switchTab('analysis', event)">🧠 Analysis</button>
+            <button class="tab-btn" onclick="switchTab('documents', event)">📚 Documents</button>
+            <button class="tab-btn" onclick="switchTab('query', event)">🔮 Query</button>
+        </div>
+
+        <!-- Upload Tab -->
+        <div id="upload-tab" class="tab-content active">
+            <div class="upload-section">
             <div class="drop-zone" id="dropZone">
                 <div class="drop-zone-text">Drag & Drop Files Here</div>
                 <div class="drop-zone-subtext">or click to browse</div>
@@ -763,7 +881,7 @@
 
             <div style="margin-top: 15px;">
                 <label>AI Provider:</label>
-                <select id="aiProvider" style="margin-left: 10px; padding: 8px; border-radius: 5px; border: 1px solid #667eea;">
+                <select id="aiProvider" style="margin-left: 10px; padding: 8px; border-radius: 5px; border: 2px solid var(--royal-purple); color: var(--deep-purple); font-weight: 500;">
                     <option value="ollama">Ollama (FREE - Local)</option>
                     <option value="openai">OpenAI GPT-3.5 ($0.40 per 1000 docs)</option>
                 </select>
@@ -771,7 +889,7 @@
 
             <div id="ollamaModelDiv" style="margin-top: 10px;">
                 <label>Ollama Model:</label>
-                <select id="ollamaModel" style="margin-left: 10px; padding: 8px; border-radius: 5px; border: 1px solid #667eea;">
+                <select id="ollamaModel" style="margin-left: 10px; padding: 8px; border-radius: 5px; border: 2px solid var(--royal-purple); color: var(--deep-purple); font-weight: 500;">
                     <option value="llama3.1">Llama 3.1</option>
                     <option value="llama3">Llama 3</option>
                     <option value="mistral">Mistral</option>
@@ -791,8 +909,8 @@
             <div class="summary" id="summary"></div>
         </div>
 
-        <!-- Spending Dashboard -->
-        <div class="spending-dashboard" id="spendingDashboard">
+            <!-- Spending Dashboard -->
+            <div class="spending-dashboard" id="spendingDashboard">
             <h3>💰 Claude Spending - <span id="currentMonth">November 2025</span></h3>
 
             <div class="spending-summary">
@@ -826,23 +944,29 @@
             <button class="secondary-btn" onclick="showSpendingHistory()">
                 View Detailed History
             </button>
+            </div>
         </div>
 
-        <!-- Tagging Management -->
-        <div class="analysis-section" id="taggingSection">
+        <!-- Tagging Tab -->
+        <div id="tagging-tab" class="tab-content">
+            <!-- Tagging Management -->
+            <div class="analysis-section" id="taggingSection">
             <h3>🏷️ Tagging Management</h3>
             <p class="research-subtitle">Verify and enhance document tags</p>
             <div class="analysis-actions">
-                <button class="analysis-btn" onclick="verifyTagging()" style="background: #00b894;">Verify Tagging Status</button>
-                <button class="analysis-btn" onclick="retagAllDocuments()" style="background: #0984e3;">Re-tag All with AI (Ollama)</button>
-                <button class="analysis-btn" onclick="retagAllDocumentsOpenAI()" style="background: #e17055;">Re-tag All with OpenAI</button>
+                <button class="analysis-btn" onclick="verifyTagging()" style="background: var(--rich-green); border-color: var(--rich-green);">Verify Tagging Status</button>
+                <button class="analysis-btn" onclick="retagAllDocuments()" style="background: var(--royal-purple); border-color: var(--royal-purple);">Re-tag All with AI (Ollama)</button>
+                <button class="analysis-btn" onclick="retagAllDocumentsOpenAI()" style="background: var(--deep-purple); border-color: var(--deep-purple);">Re-tag All with OpenAI</button>
             </div>
             <div class="analysis-status" id="taggingStatus">Click "Verify Tagging Status" to check your documents.</div>
             <div class="analysis-results" id="taggingResults" style="display:none;"></div>
+            </div>
         </div>
 
-        <!-- Claude Deep Analysis -->
-        <div class="analysis-section" id="analysisSection">
+        <!-- Analysis Tab -->
+        <div id="analysis-tab" class="tab-content">
+            <!-- Claude Deep Analysis -->
+            <div class="analysis-section" id="analysisSection">
             <h3>🧠 Claude Deep Analysis (Pass 3)</h3>
             <p class="research-subtitle">Run semantic analysis to find cross-document connections with Claude 4.5</p>
             <div class="analysis-actions">
@@ -852,10 +976,13 @@
             </div>
             <div class="analysis-status" id="analysisStatus">No analysis started yet.</div>
             <div class="analysis-results" id="analysisResults" style="display:none;"></div>
+            </div>
         </div>
 
-        <!-- Uploaded Documents List -->
-        <div class="uploaded-docs-section" id="uploadedDocsSection">
+        <!-- Documents Tab -->
+        <div id="documents-tab" class="tab-content">
+            <!-- Uploaded Documents List -->
+            <div class="uploaded-docs-section" id="uploadedDocsSection">
             <h3>📚 Uploaded Documents</h3>
 
             <div class="docs-controls">
@@ -864,7 +991,7 @@
                 </button>
                 <input type="text" id="docSearch" placeholder="🔍 Search documents..."
                        onkeyup="filterDocuments()"
-                       style="padding: 10px; border-radius: 5px; border: 1px solid #667eea; width: 300px; font-size: 1em;">
+                       style="padding: 10px; border-radius: 5px; border: 2px solid var(--royal-purple); width: 300px; font-size: 1em; color: var(--deep-purple);">
             </div>
 
             <div class="docs-stats">
@@ -874,10 +1001,13 @@
             <div class="docs-list" id="docsList">
                 <div class="loading">Loading documents...</div>
             </div>
+            </div>
         </div>
 
-        <!-- Research Assistant Section -->
-        <div class="research-section" id="researchSection">
+        <!-- Query Tab -->
+        <div id="query-tab" class="tab-content">
+            <!-- Research Assistant Section -->
+            <div class="research-section" id="researchSection">
             <h3>🔮 Research Assistant</h3>
             <p class="research-subtitle">Query the consciousness library for course research</p>
 
@@ -928,6 +1058,7 @@
 
             <!-- Error Message -->
             <div id="errorMessage"></div>
+            </div>
         </div>
     </div>
 
@@ -1352,6 +1483,41 @@
                 "July", "August", "September", "October", "November", "December"];
             document.getElementById('currentMonth').textContent =
                 `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+        }
+
+        // Tab switching function
+        function switchTab(tabName, event) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // Add active class to clicked button
+            if (event && event.target) {
+                event.target.classList.add('active');
+            } else {
+                // Fallback: find button by tab name
+                document.querySelectorAll('.tab-btn').forEach(btn => {
+                    if (btn.textContent.includes(tabName.charAt(0).toUpperCase() + tabName.slice(1))) {
+                        btn.classList.add('active');
+                    }
+                });
+            }
+            
+            // Load data if needed
+            if (tabName === 'documents') {
+                loadDocumentList();
+            } else if (tabName === 'upload') {
+                loadSpendingDashboard();
+            }
         }
 
         // Initialize on page load

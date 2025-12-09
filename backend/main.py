@@ -271,7 +271,10 @@ ANSWER:"""
 @app.get("/")
 def read_root():
     """Serve upload interface"""
-    return FileResponse("static/index.html")
+    return FileResponse(
+        "static/index.html",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+    )
 
 
 @app.get("/api")
