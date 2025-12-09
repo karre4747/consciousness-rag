@@ -83,9 +83,12 @@ async def lifespan(app: FastAPI):
                 )
             )
         
-        # Connect to index
-        index = pinecone_client.Index(PINECONE_INDEX_NAME)
-        logger.info(f"Connected to Pinecone index: {PINECONE_INDEX_NAME}")
+        # Connect to index - get host for production performance
+        # Using host instead of name avoids extra describe_index call
+        index_desc = pinecone_client.describe_index(PINECONE_INDEX_NAME)
+        index_host = index_desc.host
+        index = pinecone_client.Index(host=index_host)
+        logger.info(f"Connected to Pinecone index: {PINECONE_INDEX_NAME} (host: {index_host})")
         
         # Initialize OpenAI
         logger.info("Initializing OpenAI client...")
@@ -188,6 +191,58 @@ class AnalyzeRequest(BaseModel):
 
 
 # === HELPER FUNCTIONS ===
+
+async def pinecone_with_retry(func, max_retries=3, base_delay=1, max_delay=60, timeout=30.0):
+    """
+    Execute Pinecone operation with exponential backoff retry and timeout.
+    
+    Only retries on:
+    - 5xx server errors (500, 502, 503, 504)
+    - 429 rate limiting
+    - Timeout errors
+    
+    Does NOT retry on:
+    - 4xx client errors (400, 401, 403, 404)
+    """
+    import random
+    from pinecone.exceptions import PineconeException
+    
+    for attempt in range(max_retries):
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(func),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            if attempt == max_retries - 1:
+                raise HTTPException(status_code=504, detail="Pinecone operation timed out")
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            jitter = random.uniform(0, delay * 0.1)
+            logger.warning(f"Pinecone timeout, retrying in {delay + jitter:.2f}s (attempt {attempt + 1}/{max_retries})")
+            await asyncio.sleep(delay + jitter)
+        except PineconeException as e:
+            status_code = getattr(e, 'status', None)
+            
+            # Don't retry client errors (except 429)
+            if status_code and status_code < 500 and status_code != 429:
+                raise
+            
+            # Last attempt - re-raise
+            if attempt == max_retries - 1:
+                raise
+            
+            # Retry on 5xx or 429
+            if status_code and (status_code >= 500 or status_code == 429):
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                jitter = random.uniform(0, delay * 0.1)
+                logger.warning(f"Pinecone error {status_code}, retrying in {delay + jitter:.2f}s (attempt {attempt + 1}/{max_retries})")
+                await asyncio.sleep(delay + jitter)
+            else:
+                raise
+        except Exception as e:
+            # Non-Pinecone exceptions - don't retry
+            raise
+
 
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
     """Split text into overlapping chunks"""
@@ -315,23 +370,40 @@ def api_status():
 
 
 @app.get("/health")
-def health_check():
+async def health_check():
     """Detailed health check"""
     try:
-        # Check Pinecone
-        stats = index.describe_index_stats()
-        
-        return {
-            "status": "healthy",
-            "pinecone": {
-                "connected": True,
-                "index": PINECONE_INDEX_NAME,
-                "total_vectors": stats.total_vector_count,
-                "dimension": PINECONE_DIMENSION
-            },
-            "openai": {"connected": openai_client is not None},
-            "anthropic": {"connected": anthropic_client is not None}
-        }
+        # Check Pinecone with timeout to prevent hanging
+        try:
+            stats = await pinecone_with_retry(
+                index.describe_index_stats,
+                max_retries=2,
+                base_delay=0.5,
+                timeout=5.0
+            )
+            
+            return {
+                "status": "healthy",
+                "pinecone": {
+                    "connected": True,
+                    "index": PINECONE_INDEX_NAME,
+                    "total_vectors": stats.total_vector_count,
+                    "dimension": PINECONE_DIMENSION
+                },
+                "openai": {"connected": openai_client is not None},
+                "anthropic": {"connected": anthropic_client is not None}
+            }
+        except asyncio.TimeoutError:
+            logger.error("Health check timed out - Pinecone may be slow or unresponsive")
+            return {
+                "status": "degraded",
+                "pinecone": {
+                    "connected": False,
+                    "error": "Timeout - Pinecone not responding"
+                },
+                "openai": {"connected": openai_client is not None},
+                "anthropic": {"connected": anthropic_client is not None}
+            }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {
@@ -534,7 +606,11 @@ async def upload_document(request: UploadRequest):
             # Upsert batch to Pinecone
             if vectors_to_upsert:
                 try:
-                    index.upsert(vectors=vectors_to_upsert)
+                    await pinecone_with_retry(
+                        lambda: index.upsert(vectors=vectors_to_upsert),
+                        max_retries=3,
+                        timeout=15.0
+                    )
                     total_uploaded += len(vectors_to_upsert)
                     logger.info(f"Uploaded batch: {len(vectors_to_upsert)} vectors (total: {total_uploaded}/{total_chunks})")
                 except Exception as upsert_error:
@@ -580,12 +656,16 @@ async def query_knowledge(request: QueryRequest):
         if request.program_level:
             filter_dict["program_level"] = request.program_level
         
-        # Query Pinecone
-        query_response = index.query(
-            vector=question_embedding,
-            top_k=top_k,
-            include_metadata=True,
-            filter=filter_dict if filter_dict else None
+        # Query Pinecone (wrapped to prevent blocking)
+        query_response = await pinecone_with_retry(
+            lambda: index.query(
+                vector=question_embedding,
+                top_k=top_k,
+                include_metadata=True,
+                filter=filter_dict if filter_dict else None
+            ),
+            max_retries=2,
+            timeout=10.0
         )
         
         # Extract matches
@@ -649,17 +729,36 @@ async def query_knowledge(request: QueryRequest):
 
 
 @app.get("/stats")
-def get_stats():
+async def get_stats():
     """Get database statistics"""
     try:
-        stats = index.describe_index_stats()
+        stats = await pinecone_with_retry(
+            index.describe_index_stats,
+            max_retries=2,
+            timeout=10.0
+        )
 
-        return {
+        # Build response - skip namespaces as it's not easily serializable
+        response = {
             "index_name": PINECONE_INDEX_NAME,
             "total_vectors": stats.total_vector_count,
-            "dimension": PINECONE_DIMENSION,
-            "namespaces": stats.namespaces
+            "dimension": PINECONE_DIMENSION
         }
+        
+        # Try to add namespaces count if available
+        if hasattr(stats, 'namespaces'):
+            try:
+                if isinstance(stats.namespaces, dict):
+                    response["namespaces_count"] = len(stats.namespaces)
+                elif stats.namespaces:
+                    response["namespaces_count"] = 1  # At least one namespace exists
+            except:
+                pass  # Skip if we can't serialize it
+        
+        return response
+    except asyncio.TimeoutError:
+        logger.error("Stats retrieval timed out")
+        raise HTTPException(status_code=504, detail="Pinecone query timed out")
     except Exception as e:
         logger.error(f"Stats retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -676,12 +775,16 @@ async def get_uploaded_documents():
         List of documents with titles, chunk counts
     """
     try:
-        # Query Pinecone to get all vectors
+        # Query Pinecone to get all vectors (wrapped in thread to prevent blocking)
         query_vector = [0.0] * PINECONE_DIMENSION
-        results = index.query(
-            vector=query_vector,
-            top_k=10000,  # Maximum allowed by Pinecone
-            include_metadata=True
+        results = await pinecone_with_retry(
+            lambda: index.query(
+                vector=query_vector,
+                top_k=10000,  # Maximum allowed by Pinecone
+                include_metadata=True
+            ),
+            max_retries=2,
+            timeout=30.0
         )
 
         # Group by title to get unique documents
@@ -708,6 +811,9 @@ async def get_uploaded_documents():
             "documents": doc_list
         }
 
+    except asyncio.TimeoutError:
+        logger.error("Uploaded documents query timed out")
+        raise HTTPException(status_code=504, detail="Pinecone query timed out - database may be large")
     except Exception as e:
         logger.error(f"Failed to get uploaded documents: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -729,11 +835,15 @@ async def check_duplicate(request: Dict[str, str]):
 
         # Query Pinecone with metadata filter to find this title
         query_vector = [0.0] * PINECONE_DIMENSION
-        results = index.query(
-            vector=query_vector,
-            top_k=100,  # Get enough to count chunks
-            include_metadata=True,
-            filter={"title": title}
+        results = await pinecone_with_retry(
+            lambda: index.query(
+                vector=query_vector,
+                top_k=100,  # Get enough to count chunks
+                include_metadata=True,
+                filter={"title": title}
+            ),
+            max_retries=2,
+            timeout=10.0
         )
 
         exists = len(results.matches) > 0
@@ -766,10 +876,14 @@ async def verify_tagging():
     try:
         # Query Pinecone to get sample of documents
         query_vector = [0.0] * PINECONE_DIMENSION
-        results = index.query(
-            vector=query_vector,
-            top_k=10000,  # Get all documents
-            include_metadata=True
+        results = await pinecone_with_retry(
+            lambda: index.query(
+                vector=query_vector,
+                top_k=10000,  # Get all documents
+                include_metadata=True
+            ),
+            max_retries=2,
+            timeout=30.0
         )
         
         if not results.matches:
@@ -894,20 +1008,28 @@ async def retag_documents(request: RetagRequest):
             # Filter by specific titles
             all_matches = []
             for title in request.document_titles:
-                results = index.query(
-                    vector=query_vector,
-                    top_k=10000,
-                    include_metadata=True,
-                    filter={"title": title}
+                results = await pinecone_with_retry(
+                    lambda: index.query(
+                        vector=query_vector,
+                        top_k=10000,
+                        include_metadata=True,
+                        filter={"title": title}
+                    ),
+                    max_retries=2,
+                    timeout=30.0
                 )
                 all_matches.extend(results.matches)
             matches = all_matches
         else:
             # Get all documents
-            results = index.query(
-                vector=query_vector,
-                top_k=10000,
-                include_metadata=True
+            results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=query_vector,
+                    top_k=10000,
+                    include_metadata=True
+                ),
+                max_retries=2,
+                timeout=30.0
             )
             matches = results.matches
         
@@ -1023,7 +1145,11 @@ async def retag_documents(request: RetagRequest):
                     if len(vectors_to_update) >= batch_size:
                         # Fetch existing vectors to preserve embeddings
                         ids_to_fetch = [v["id"] for v in vectors_to_update]
-                        fetched = index.fetch(ids=ids_to_fetch)
+                        fetched = await pinecone_with_retry(
+                            lambda: index.fetch(ids=ids_to_fetch),
+                            max_retries=2,
+                            timeout=10.0
+                        )
                         
                         # Prepare vectors with existing embeddings + updated metadata
                         vectors_with_embeddings = []
@@ -1038,7 +1164,11 @@ async def retag_documents(request: RetagRequest):
                                 })
                         
                         if vectors_with_embeddings:
-                            index.upsert(vectors=vectors_with_embeddings)
+                            await pinecone_with_retry(
+                                lambda: index.upsert(vectors=vectors_with_embeddings),
+                                max_retries=3,
+                                timeout=15.0
+                            )
                             updated_chunks += len(vectors_with_embeddings)
                             logger.info(f"Updated batch: {len(vectors_with_embeddings)} chunks")
                         
@@ -1052,7 +1182,11 @@ async def retag_documents(request: RetagRequest):
         # Process remaining vectors
         if vectors_to_update:
             ids_to_fetch = [v["id"] for v in vectors_to_update]
-            fetched = index.fetch(ids=ids_to_fetch)
+            fetched = await pinecone_with_retry(
+                lambda: index.fetch(ids=ids_to_fetch),
+                max_retries=2,
+                timeout=10.0
+            )
             
             vectors_with_embeddings = []
             for vec_update in vectors_to_update:
@@ -1066,7 +1200,11 @@ async def retag_documents(request: RetagRequest):
                     })
             
             if vectors_with_embeddings:
-                index.upsert(vectors=vectors_with_embeddings)
+                await pinecone_with_retry(
+                    lambda: index.upsert(vectors=vectors_with_embeddings),
+                    max_retries=3,
+                    timeout=15.0
+                )
                 updated_chunks += len(vectors_with_embeddings)
         
         logger.info(f"Re-tagging complete: {updated_chunks} chunks updated, {failed_chunks} failed")
@@ -1100,11 +1238,15 @@ async def delete_document(title: str):
     try:
         # First, query to find all chunks with this title
         query_vector = [0.0] * PINECONE_DIMENSION
-        results = index.query(
-            vector=query_vector,
-            top_k=10000,  # Get all chunks
-            include_metadata=True,
-            filter={"title": title}
+        results = await pinecone_with_retry(
+            lambda: index.query(
+                vector=query_vector,
+                top_k=10000,  # Get all chunks
+                include_metadata=True,
+                filter={"title": title}
+            ),
+            max_retries=2,
+            timeout=30.0
         )
 
         # Collect all IDs to delete
@@ -1118,7 +1260,11 @@ async def delete_document(title: str):
             }
 
         # Delete all chunks
-        index.delete(ids=ids_to_delete)
+        await pinecone_with_retry(
+            lambda: index.delete(ids=ids_to_delete),
+            max_retries=3,
+            timeout=15.0
+        )
 
         logger.info(f"Deleted {len(ids_to_delete)} chunks of document '{title}'")
 
@@ -1224,23 +1370,35 @@ async def estimate_analysis_cost(request: Dict[str, Any]):
         query_vector = [0.0] * PINECONE_DIMENSION
 
         if analysis_type == "recent":
-            results = index.query(
-                vector=query_vector,
-                top_k=min(limit, 10000),
-                include_metadata=True
+            results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=query_vector,
+                    top_k=min(limit, 10000),
+                    include_metadata=True
+                ),
+                max_retries=2,
+                timeout=30.0
             )
         elif analysis_type == "full":
-            results = index.query(
-                vector=query_vector,
-                top_k=10000,  # Max we can get in one query
-                include_metadata=True
+            results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=query_vector,
+                    top_k=10000,  # Max we can get in one query
+                    include_metadata=True
+                ),
+                max_retries=2,
+                timeout=30.0
             )
         elif analysis_type == "theme":
-            results = index.query(
-                vector=query_vector,
-                top_k=10000,
-                include_metadata=True,
-                filter=filters or {}
+            results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=query_vector,
+                    top_k=10000,
+                    include_metadata=True,
+                    filter=filters or {}
+                ),
+                max_retries=2,
+                timeout=30.0
             )
         else:
             raise HTTPException(status_code=400, detail="Invalid analysis_type")
@@ -1292,36 +1450,52 @@ async def analyze_documents(request: AnalyzeRequest):
         matches = []
 
         if analysis_type == "recent":
-            results = index.query(
-                vector=query_vector,
-                top_k=min(limit, 10000),
-                include_metadata=True
+            results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=query_vector,
+                    top_k=min(limit, 10000),
+                    include_metadata=True
+                ),
+                max_retries=2,
+                timeout=30.0
             )
             matches = results.matches
         elif analysis_type == "full":
-            results = index.query(
-                vector=query_vector,
-                top_k=10000,
-                include_metadata=True
+            results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=query_vector,
+                    top_k=10000,
+                    include_metadata=True
+                ),
+                max_retries=2,
+                timeout=30.0
             )
             matches = results.matches
         elif analysis_type == "theme":
-            results = index.query(
-                vector=query_vector,
-                top_k=10000,
-                include_metadata=True,
-                filter=filters or {}
+            results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=query_vector,
+                    top_k=10000,
+                    include_metadata=True,
+                    filter=filters or {}
+                ),
+                max_retries=2,
+                timeout=30.0
             )
             matches = results.matches
         elif analysis_type == "selected":
             if not selected_titles:
                 raise HTTPException(status_code=400, detail="selected_titles required for selected analysis_type")
             for title in selected_titles:
-                partial = index.query(
-                    vector=query_vector,
-                    top_k=min(limit, 500),
-                    include_metadata=True,
-                    filter={"title": title}
+                partial = await pinecone_with_retry(
+                    lambda: index.query(
+                        vector=query_vector,
+                        top_k=min(limit, 500),
+                        include_metadata=True,
+                        filter={"title": title}
+                    ),
+                    max_retries=2,
+                    timeout=15.0
                 )
                 matches.extend(partial.matches)
         else:
