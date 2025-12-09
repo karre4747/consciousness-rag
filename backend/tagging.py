@@ -247,6 +247,36 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "atmic": ["atmic body", "spiritual will", "divine purpose", "monadic"]
     }
 
+    # === ASTROLOGY ===
+    astrology_keywords = {
+        "planets": {
+            "sun": ["sun sign", "solar return", "vitality", "ego", "identity", "solar energy"],
+            "moon": ["moon sign", "lunar", "emotions", "subconscious", "instincts", "mother"],
+            "mercury": ["mercury", "communication", "intellect", "thinking", "gemini ruler", "virgo ruler"],
+            "venus": ["venus", "love", "beauty", "values", "relationships", "taurus ruler", "libra ruler"],
+            "mars": ["mars", "action", "energy", "drive", "conflict", "aries ruler"],
+            "jupiter": ["jupiter", "expansion", "growth", "abundance", "wisdom", "sagittarius ruler"],
+            "saturn": ["saturn", "karma", "discipline", "structure", "time", "restriction", "capricorn ruler"],
+            "uranus": ["uranus", "awakening", "change", "rebellion", "innovation", "aquarius ruler"],
+            "neptune": ["neptune", "illusion", "spirituality", "dreams", "oneness", "pisces ruler"],
+            "pluto": ["pluto", "transformation", "power", "rebirth", "intensity", "scorpio ruler"]
+        },
+        "zodiac_signs": {
+            "aries": ["aries", "ram", "fire sign", "cardinal fire"],
+            "taurus": ["taurus", "bull", "earth sign", "fixed earth"],
+            "gemini": ["gemini", "twins", "air sign", "mutable air"],
+            "cancer": ["cancer", "crab", "water sign", "cardinal water"],
+            "leo": ["leo", "lion", "fire sign", "fixed fire"],
+            "virgo": ["virgo", "virgin", "maiden", "earth sign", "mutable earth"],
+            "libra": ["libra", "scales", "balance", "air sign", "cardinal air"],
+            "scorpio": ["scorpio", "scorpion", "water sign", "fixed water"],
+            "sagittarius": ["sagittarius", "archer", "centaur", "fire sign", "mutable fire"],
+            "capricorn": ["capricorn", "goat", "sea goat", "earth sign", "cardinal earth"],
+            "aquarius": ["aquarius", "water bearer", "air sign", "fixed air"],
+            "pisces": ["pisces", "fish", "water sign", "mutable water"]
+        }
+    }
+
     # === PROCESS ALL CATEGORIES ===
     def check_keywords(category_dict, category_name):
         for key, keywords in category_dict.items():
@@ -272,7 +302,10 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
     check_keywords(bridge_concepts, "bridge_concepts")
     check_keywords(healing_keywords, "healing_modalities")
     check_keywords(sacred_geometry, "sacred_geometry")
+    check_keywords(sacred_geometry, "sacred_geometry")
     check_keywords(subtle_bodies, "subtle_bodies")
+    check_keywords(astrology_keywords["planets"], "planets")
+    check_keywords(astrology_keywords["zodiac_signs"], "zodiac_signs")
 
     # === EMOTION DETECTION ===
     emotions = []
@@ -302,7 +335,9 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
         "ascension_path": detected_categories.get("ascension_paths", [""])[0] if detected_categories.get("ascension_paths") else "",
         "bridge_concept": detected_categories.get("bridge_concepts", [""])[0] if detected_categories.get("bridge_concepts") else "",
         "recovery_focus": detected_categories.get("addiction_type", [""])[0] if detected_categories.get("addiction_type") else "",
-        "healing_modality": detected_categories.get("healing_modalities", [""])[0] if detected_categories.get("healing_modalities") else ""
+        "healing_modality": detected_categories.get("healing_modalities", [""])[0] if detected_categories.get("healing_modalities") else "",
+        "primary_planet": detected_categories.get("planets", [""])[0] if detected_categories.get("planets") else "",
+        "zodiac_sign": detected_categories.get("zodiac_signs", [""])[0] if detected_categories.get("zodiac_signs") else ""
     }
 
 
@@ -403,7 +438,7 @@ Return ONLY valid JSON with these fields:
   "consciousness_level": "shame|fear|courage|acceptance|love|peace|enlightenment"
 }}
 
-Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies"""
+Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies, astrology (planets/zodiac_signs)"""
 
     max_retries = 3
     base_delay = 1

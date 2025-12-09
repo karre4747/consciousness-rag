@@ -578,7 +578,9 @@ async def upload_document(request: UploadRequest):
                         "all_healing_modalities": detected_cats.get("healing_modalities", []),
                         "all_sacred_geometry": detected_cats.get("sacred_geometry", []),
                         "all_subtle_bodies": detected_cats.get("subtle_bodies", []),
-                        "all_addiction_types": detected_cats.get("addiction_type", [])
+                        "all_addiction_types": detected_cats.get("addiction_type", []),
+                        "all_planets": detected_cats.get("planets", []),
+                        "all_zodiac_signs": detected_cats.get("zodiac_signs", [])
                     }
 
                     # Add program_level only if detected (addiction-specific content)
@@ -707,6 +709,8 @@ async def query_knowledge(request: QueryRequest):
                     "all_chakras": match.metadata.get("all_chakras", []),
                     "all_12_steps": match.metadata.get("all_12_steps", []),
                     "all_ascension_paths": match.metadata.get("all_ascension_paths", []),
+                    "all_planets": match.metadata.get("all_planets", []),
+                    "all_zodiac_signs": match.metadata.get("all_zodiac_signs", []),
                     "primary_theme": match.metadata.get("primary_theme", ""),
                     "consciousness_level": match.metadata.get("consciousness_level", ""),
                 }
