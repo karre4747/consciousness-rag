@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Evolve Consciousness Engine - Expanded Tagging System v2.0
-Comprehensive tagging for consciousness, recovery, mysticism, quantum physics, and esoteric teachings
-Updated: November 13, 2025
+Archived: Expanded Tagging System v2.0 (legacy)
+Superseded by the live tagging implementation in backend/tagging.py.
 """
 
 from typing import Dict, Any, List
@@ -13,7 +12,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
     tags = []
     detected_categories = {}
     text_lower = text.lower()
-    
+
     # === CHAKRAS & ENERGY CENTERS ===
     chakra_keywords = {
         "root": ["survival", "safety", "grounding", "security", "foundation", "muladhara", "fear", "stability"],
@@ -26,7 +25,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "soul_star": ["akashic", "higher self", "8th chakra", "karmic", "soul purpose"],
         "earth_star": ["grounding", "earth connection", "crystalline", "gaia", "ancestral"]
     }
-    
+
     # === MERIDIANS & ACUPUNCTURE POINTS ===
     meridian_keywords = {
         "lung": ["lung meridian", "grief", "letting go", "breath", "metal element", "po"],
@@ -35,14 +34,14 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "spleen": ["spleen", "pancreas", "overthinking", "yi", "transformation"],
         "heart_meridian": ["heart meridian", "fire element", "shen", "joy", "love"],
         "small_intestine": ["small intestine", "absorption", "discernment", "separation"],
-        "bladder": ["bladder meridian", "water element", "fear", "zhi", "willpower"],
+        "bladder": ["bladder", "water element", "fear", "zhi", "willpower"],
         "kidney": ["kidney meridian", "jing", "essence", "fear", "wisdom", "ancestral qi"],
         "pericardium": ["pericardium", "heart protector", "circulation", "relationships"],
         "triple_warmer": ["triple warmer", "san jiao", "metabolism", "protection"],
         "gallbladder": ["gallbladder", "decision making", "wood element", "courage"],
         "liver": ["liver meridian", "hun", "anger", "vision", "planning", "detox"]
     }
-    
+
     # === ADDICTION & RECOVERY SPECIFIC ===
     recovery_keywords = {
         "addiction_type": {
@@ -76,7 +75,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
             "step_12": ["spiritual awakening", "carry message", "practice principles"]
         }
     }
-    
+
     # === CONSCIOUSNESS LEVELS (Extended Hawkins Scale) ===
     consciousness_keywords = {
         "shame": ["shame", "humiliation", "worthless", "miserable", "20"],
@@ -97,7 +96,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "peace": ["peace", "tranquility", "transcendence", "600"],
         "enlightenment": ["enlightenment", "pure consciousness", "700-1000"]
     }
-    
+
     # === ESOTERIC TRADITIONS ===
     esoteric_keywords = {
         "hermetic": ["hermetic", "hermes", "thoth", "emerald tablet", "as above", "kybalion"],
@@ -114,7 +113,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "christian_mysticism": ["christian mystic", "contemplative", "desert fathers", "teresa of avila", "john of the cross"],
         "essene": ["essene", "dead sea scrolls", "qumran", "nazarene", "gnostic christianity"]
     }
-    
+
     # === ESOTERIC TEACHERS & PHILOSOPHERS (NEW) ===
     esoteric_teachers = {
         "leadbeater": ["leadbeater", "charles leadbeater", "clairvoyance", "thought forms", "chakras leadbeater", "occult chemistry"],
@@ -137,7 +136,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "fillmore": ["myrtle fillmore", "charles fillmore", "unity", "affirmative prayer"],
         "fox": ["emmet fox", "sermon on the mount", "golden key", "mental equivalent"]
     }
-    
+
     # === QUANTUM & SCIENTIFIC ===
     quantum_keywords = {
         "quantum_physics": ["quantum", "quantum mechanics", "quantum field", "quantum theory"],
@@ -147,7 +146,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "epigenetics": ["epigenetic", "gene expression", "methylation", "generational trauma"],
         "biofield": ["biofield", "aura", "electromagnetic", "biophoton", "kirlian"]
     }
-    
+
     # === QUANTUM PARTICLES & CONCEPTS (NEW) ===
     quantum_particles = {
         "photons": ["photon", "light particle", "electromagnetic radiation", "biophoton", "light body"],
@@ -159,7 +158,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "wave_particle": ["wave-particle duality", "double slit", "complementarity"],
         "zero_point": ["zero point energy", "vacuum energy", "quantum vacuum", "casimir effect"]
     }
-    
+
     # === UNIVERSAL LAWS & PRINCIPLES ===
     universal_laws = {
         "law_of_one": ["law of one", "unity consciousness", "we are all one", "oneness"],
@@ -172,7 +171,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "law_of_gender": ["masculine feminine", "creation", "generation", "yin yang"],
         "law_of_mind": ["law of mind", "thought creates", "mental causation", "mind over matter"]
     }
-    
+
     # === COMPARATIVE MYSTICISM - ASCENSION PATHS (NEW) ===
     ascension_paths = {
         "12_step_ascension": ["12 steps", "spiritual awakening", "higher power", "recovery path", "step work", "addiction ascension"],
@@ -185,7 +184,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "taoist_immortality": ["taoist immortality", "golden elixir", "inner alchemy", "neidan"],
         "yogic_samadhi": ["samadhi", "yoga", "raja yoga", "kundalini awakening", "siddhis"]
     }
-    
+
     # === CONSCIOUSNESS-MATTER BRIDGES (NEW) ===
     bridge_concepts = {
         "photon_consciousness": ["photon consciousness", "light as awareness", "biophoton field", "light body", "photon mind"],
@@ -196,7 +195,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "neuroscience_mysticism": ["neuroscience mysticism", "brain and consciousness", "neural correlates"],
         "quantum_spirituality": ["quantum spirituality", "physics and consciousness", "science and mysticism"]
     }
-    
+
     # === HEALING MODALITIES ===
     healing_keywords = {
         "energy_healing": ["reiki", "pranic", "quantum touch", "healing hands", "energy work"],
@@ -207,14 +206,14 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "bodywork": ["massage", "rolfing", "craniosacral", "somatic", "feldenkrais"],
         "plant_medicine": ["ayahuasca", "psilocybin", "san pedro", "iboga", "cannabis", "sacred plants"]
     }
-    
+
     # === SACRED GEOMETRY ===
     sacred_geometry = {
         "patterns": ["flower of life", "metatron", "sri yantra", "golden ratio", "fibonacci", "vesica piscis"],
         "platonic_solids": ["tetrahedron", "cube", "octahedron", "dodecahedron", "icosahedron"],
         "symbols": ["ankh", "om", "yin yang", "pentagram", "hexagram", "cross", "spiral"]
     }
-    
+
     # === SUBTLE BODIES ===
     subtle_bodies = {
         "etheric": ["etheric body", "vital body", "energy double", "prana body"],
@@ -224,7 +223,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "buddhic": ["buddhic body", "intuitive body", "christ consciousness", "unity body"],
         "atmic": ["atmic body", "spiritual will", "divine purpose", "monadic"]
     }
-    
+
     # === PROCESS ALL CATEGORIES ===
     def check_keywords(category_dict, category_name):
         for key, keywords in category_dict.items():
@@ -233,7 +232,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
                     detected_categories[category_name] = []
                 detected_categories[category_name].append(key)
                 tags.extend(keywords[:3])  # Add first 3 keywords as tags
-    
+
     # Check all categories
     check_keywords(chakra_keywords, "chakras")
     check_keywords(meridian_keywords, "meridians")
@@ -251,7 +250,7 @@ def generate_tags(text: str) -> Dict[str, Any]:
     check_keywords(healing_keywords, "healing_modalities")
     check_keywords(sacred_geometry, "sacred_geometry")
     check_keywords(subtle_bodies, "subtle_bodies")
-    
+
     # === EMOTION DETECTION ===
     emotions = []
     emotion_keywords = {
@@ -264,11 +263,11 @@ def generate_tags(text: str) -> Dict[str, Any]:
         "guilt": ["guilt", "remorse", "regret", "blame", "fault", "responsible"],
         "peace": ["peace", "calm", "serene", "tranquil", "centered", "balanced"]
     }
-    
+
     for emotion, keywords in emotion_keywords.items():
         if any(kw in text_lower for kw in keywords):
             emotions.append(emotion)
-    
+
     return {
         "tags": list(set(tags))[:50],  # Limit to 50 unique tags
         "categories": detected_categories,
@@ -293,9 +292,9 @@ if __name__ == "__main__":
     are intimately connected, as Leadbeater and Besant discovered through their clairvoyant 
     investigations in Occult Chemistry. The recovery path is an ascension path.
     """
-    
+
     result = generate_tags(sample_text)
-    
+
     print("=== TAGGING RESULT ===")
     print(f"\nDetected Categories: {result['categories']}")
     print(f"\nAscension Path: {result['ascension_path']}")
@@ -303,3 +302,4 @@ if __name__ == "__main__":
     print(f"\nBridge Concept: {result['bridge_concept']}")
     print(f"\nTraditions: {result['tradition']}")
     print(f"\nTags (first 20): {result['tags'][:20]}")
+

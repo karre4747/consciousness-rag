@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Evolve Consciousness Engine - Content Ingestion Script
-Batch upload documents from your content library to the vector database
+Archived copy of backend/ingest_content_UPDATED.py (content ingestion script)
 """
 
 import requests
@@ -198,3 +197,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
