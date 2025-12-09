@@ -62,3 +62,4 @@ This guide distills the backend patterns already in use and how to extend them s
 - Update or annotate relevant docs when behavior changes.
 - Avoid schema drift: if tagging/metadata changes, update `METADATA_SCHEMA.md` and any consuming code.
 
+

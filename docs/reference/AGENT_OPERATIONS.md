@@ -73,3 +73,4 @@ This guide defines the roles, responsibilities, and working agreements for futur
 - **Tagging/schema change:** Read `METADATA_SCHEMA.md` → update tagging logic and docs together → validate Pinecone constraints.
 - **Docs change:** Keep concise; link to sources; ensure consistency with current code and configs.
 
+

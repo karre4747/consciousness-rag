@@ -6,3 +6,4 @@ app = FastAPI()
 def read_root():
     return {"message": "RAG system is running!"}
 
+

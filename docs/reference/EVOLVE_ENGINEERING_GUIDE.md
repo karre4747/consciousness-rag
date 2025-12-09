@@ -63,3 +63,4 @@ This guide captures the current architecture, risks, and design principles for t
 - CSP: `docs/reference/CSP_BEST_PRACTICES.md`
 - Testing/Troubleshooting: `docs/reference/TESTING_GUIDE.md`, `docs/reference/TROUBLESHOOTING.md`
 
+

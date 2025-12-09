@@ -71,3 +71,4 @@ Goal: deliver a rich, modern portal UI while keeping the stack simple (vanilla H
 - `API_REFERENCE.md` (for endpoints used by the UI)
 - `TESTING_GUIDE.md` (for manual UI flows)
 
+
