@@ -775,45 +775,111 @@ async def get_stats():
 async def get_uploaded_documents():
     """
     Get list of all unique documents currently in Pinecone
+    
+    FIXED: Now uses list_paginated to retrieve ALL vectors, not just top_k=10000
+    This ensures consistent document counts regardless of total chunk count.
 
     Returns:
         List of documents with titles, chunk counts
     """
     try:
-        # Query Pinecone to get all vectors (wrapped in thread to prevent blocking)
-        query_vector = [0.0] * PINECONE_DIMENSION
-        results = await pinecone_with_retry(
-            lambda: index.query(
-                vector=query_vector,
-                top_k=10000,  # Maximum allowed by Pinecone
-                include_metadata=True
-            ),
+        # First, get total vector count to determine if we need pagination
+        stats = await pinecone_with_retry(
+            index.describe_index_stats,
             max_retries=2,
-            timeout=30.0
+            timeout=10.0
         )
-
+        
+        total_vectors = stats.total_vector_count
+        logger.info(f"Total vectors in index: {total_vectors}")
+        
         # Group by title to get unique documents
         documents_dict = {}
-        for match in results.matches:
-            title = match.metadata.get('title', 'Unknown')
-
-            if title not in documents_dict:
-                documents_dict[title] = {
-                    'title': title,
-                    'source': match.metadata.get('source', ''),
-                    'chunk_count': 0,
-                    'total_chunks': match.metadata.get('total_chunks', 0)
-                }
-
-            documents_dict[title]['chunk_count'] += 1
-
+        
+        if total_vectors == 0:
+            return {
+                "status": "success",
+                "total_documents": 0,
+                "documents": []
+            }
+        
+        # Use list_paginated to get ALL vectors (handles pagination automatically)
+        # This is more efficient than query() for listing all vectors
+        try:
+            # Pinecone's list() returns an iterator that handles pagination
+            all_vector_ids = []
+            for ids in index.list(limit=10000):  # Fetch in batches of 10000
+                all_vector_ids.extend(ids)
+            
+            logger.info(f"Retrieved {len(all_vector_ids)} vector IDs")
+            
+            # Fetch metadata for all vectors in batches
+            FETCH_BATCH_SIZE = 1000  # Pinecone fetch limit
+            for i in range(0, len(all_vector_ids), FETCH_BATCH_SIZE):
+                batch_ids = all_vector_ids[i:i + FETCH_BATCH_SIZE]
+                
+                fetched = await pinecone_with_retry(
+                    lambda: index.fetch(ids=batch_ids),
+                    max_retries=2,
+                    timeout=15.0
+                )
+                
+                # Process fetched vectors
+                for vec_id, vector_data in fetched.vectors.items():
+                    metadata = vector_data.metadata
+                    title = metadata.get('title', 'Unknown')
+                    
+                    if title not in documents_dict:
+                        documents_dict[title] = {
+                            'title': title,
+                            'source': metadata.get('source', ''),
+                            'chunk_count': 0,
+                            'total_chunks': metadata.get('total_chunks', 0)
+                        }
+                    
+                    documents_dict[title]['chunk_count'] += 1
+                
+                logger.info(f"Processed batch {i//FETCH_BATCH_SIZE + 1}: {len(batch_ids)} vectors")
+        
+        except Exception as list_error:
+            # Fallback to query method if list() fails
+            logger.warning(f"list() failed, falling back to query: {list_error}")
+            
+            # Use query as fallback (may be inconsistent for large datasets)
+            query_vector = [0.0] * PINECONE_DIMENSION
+            results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=query_vector,
+                    top_k=10000,
+                    include_metadata=True
+                ),
+                max_retries=2,
+                timeout=30.0
+            )
+            
+            for match in results.matches:
+                title = match.metadata.get('title', 'Unknown')
+                
+                if title not in documents_dict:
+                    documents_dict[title] = {
+                        'title': title,
+                        'source': match.metadata.get('source', ''),
+                        'chunk_count': 0,
+                        'total_chunks': match.metadata.get('total_chunks', 0)
+                    }
+                
+                documents_dict[title]['chunk_count'] += 1
+        
         # Convert to list and sort alphabetically
         doc_list = sorted(documents_dict.values(), key=lambda x: x['title'].lower())
-
+        
+        logger.info(f"Found {len(doc_list)} unique documents")
+        
         return {
             "status": "success",
             "total_documents": len(doc_list),
-            "documents": doc_list
+            "documents": doc_list,
+            "total_vectors": total_vectors
         }
 
     except asyncio.TimeoutError:
@@ -1062,18 +1128,24 @@ async def retag_documents(request: RetagRequest):
         
         logger.info(f"Found {total_docs} documents with {total_chunks} total chunks")
         
-        # Process in batches
-        vectors_to_update = []
+        # PARALLEL PROCESSING: Process chunks concurrently with rate limiting
+        CONCURRENT_LIMIT = 10  # Process 10 chunks at a time
+        semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
         
-        for doc_title, doc_matches in documents_dict.items():
-            logger.info(f"Processing document: {doc_title} ({len(doc_matches)} chunks)")
+        processed_chunks = 0
+        updated_chunks = 0
+        failed_chunks = 0
+        
+        async def process_single_chunk(match, doc_title):
+            """Process a single chunk with AI tagging (rate-limited)"""
+            nonlocal processed_chunks, failed_chunks
             
-            for match in doc_matches:
+            async with semaphore:  # Limit concurrent processing
                 try:
                     chunk_text = match.metadata.get('text', '')
                     if not chunk_text:
                         logger.warning(f"Skipping chunk {match.id} - no text found")
-                        continue
+                        return None
                     
                     # Re-generate tags with AI enhancement
                     tags = await generate_tags(
@@ -1125,7 +1197,9 @@ async def retag_documents(request: RetagRequest):
                         "all_healing_modalities": detected_cats.get("healing_modalities", existing_metadata.get("all_healing_modalities", [])),
                         "all_sacred_geometry": detected_cats.get("sacred_geometry", existing_metadata.get("all_sacred_geometry", [])),
                         "all_subtle_bodies": detected_cats.get("subtle_bodies", existing_metadata.get("all_subtle_bodies", [])),
-                        "all_addiction_types": detected_cats.get("addiction_type", existing_metadata.get("all_addiction_types", []))
+                        "all_addiction_types": detected_cats.get("addiction_type", existing_metadata.get("all_addiction_types", [])),
+                        "all_planets": detected_cats.get("planets", existing_metadata.get("all_planets", [])),
+                        "all_zodiac_signs": detected_cats.get("zodiac_signs", existing_metadata.get("all_zodiac_signs", []))
                     }
                     
                     # Add program_level if detected
@@ -1135,73 +1209,58 @@ async def retag_documents(request: RetagRequest):
                     # Clean metadata for Pinecone
                     updated_metadata = clean_metadata_for_pinecone(updated_metadata)
                     
-                    # Get the existing embedding (we don't regenerate it)
-                    # We need to fetch it from Pinecone or keep the existing vector
-                    # For now, we'll need to query to get the vector, or we can just update metadata
-                    # Actually, we can use fetch to get the vectors
-                    
-                    vectors_to_update.append({
-                        "id": match.id,
-                        "metadata": updated_metadata
-                    })
-                    
                     processed_chunks += 1
                     
-                    # Update in batches
-                    if len(vectors_to_update) >= batch_size:
-                        # Fetch existing vectors to preserve embeddings
-                        ids_to_fetch = [v["id"] for v in vectors_to_update]
-                        fetched = await pinecone_with_retry(
-                            lambda: index.fetch(ids=ids_to_fetch),
-                            max_retries=2,
-                            timeout=10.0
-                        )
-                        
-                        # Prepare vectors with existing embeddings + updated metadata
-                        vectors_with_embeddings = []
-                        for vec_update in vectors_to_update:
-                            vec_id = vec_update["id"]
-                            if vec_id in fetched.vectors:
-                                existing_vector = fetched.vectors[vec_id]
-                                vectors_with_embeddings.append({
-                                    "id": vec_id,
-                                    "values": existing_vector.values,  # Keep existing embedding
-                                    "metadata": vec_update["metadata"]
-                                })
-                        
-                        if vectors_with_embeddings:
-                            await pinecone_with_retry(
-                                lambda: index.upsert(vectors=vectors_with_embeddings),
-                                max_retries=3,
-                                timeout=15.0
-                            )
-                            updated_chunks += len(vectors_with_embeddings)
-                            logger.info(f"Updated batch: {len(vectors_with_embeddings)} chunks")
-                        
-                        vectors_to_update = []
-                
+                    return {
+                        "id": match.id,
+                        "metadata": updated_metadata
+                    }
+                    
                 except Exception as chunk_error:
                     logger.error(f"Error processing chunk {match.id}: {chunk_error}")
                     failed_chunks += 1
-                    continue
+                    return None
         
-        # Process remaining vectors
-        if vectors_to_update:
-            ids_to_fetch = [v["id"] for v in vectors_to_update]
+        # Process all chunks in parallel (with concurrency limit)
+        all_tasks = []
+        for doc_title, doc_matches in documents_dict.items():
+            logger.info(f"Queueing document: {doc_title} ({len(doc_matches)} chunks)")
+            for match in doc_matches:
+                task = process_single_chunk(match, doc_title)
+                all_tasks.append(task)
+        
+        logger.info(f"Processing {len(all_tasks)} chunks in parallel (max {CONCURRENT_LIMIT} concurrent)")
+        
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*all_tasks, return_exceptions=True)
+        
+        # Filter out None results and exceptions
+        vectors_to_update = [r for r in results if r is not None and not isinstance(r, Exception)]
+        
+        logger.info(f"Completed parallel processing: {len(vectors_to_update)} chunks ready for update")
+        
+        # Update in batches
+        UPSERT_BATCH_SIZE = 100
+        for i in range(0, len(vectors_to_update), UPSERT_BATCH_SIZE):
+            batch = vectors_to_update[i:i + UPSERT_BATCH_SIZE]
+            
+            # Fetch existing vectors to preserve embeddings
+            ids_to_fetch = [v["id"] for v in batch]
             fetched = await pinecone_with_retry(
                 lambda: index.fetch(ids=ids_to_fetch),
                 max_retries=2,
                 timeout=10.0
             )
             
+            # Prepare vectors with existing embeddings + updated metadata
             vectors_with_embeddings = []
-            for vec_update in vectors_to_update:
+            for vec_update in batch:
                 vec_id = vec_update["id"]
                 if vec_id in fetched.vectors:
                     existing_vector = fetched.vectors[vec_id]
                     vectors_with_embeddings.append({
                         "id": vec_id,
-                        "values": existing_vector.values,
+                        "values": existing_vector.values,  # Keep existing embedding
                         "metadata": vec_update["metadata"]
                     })
             
@@ -1212,8 +1271,9 @@ async def retag_documents(request: RetagRequest):
                     timeout=15.0
                 )
                 updated_chunks += len(vectors_with_embeddings)
+                logger.info(f"Updated batch {i//UPSERT_BATCH_SIZE + 1}: {len(vectors_with_embeddings)} chunks")
         
-        logger.info(f"Re-tagging complete: {updated_chunks} chunks updated, {failed_chunks} failed")
+        logger.info(f"Re-tagging complete: {processed_chunks} processed, {updated_chunks} updated, {failed_chunks} failed")
         
         return {
             "status": "success",
@@ -1221,10 +1281,9 @@ async def retag_documents(request: RetagRequest):
             "documents_processed": total_docs,
             "chunks_processed": processed_chunks,
             "chunks_updated": updated_chunks,
-            "chunks_failed": failed_chunks,
-            "ai_provider": ai_provider
+            "chunks_failed": failed_chunks
         }
-        
+    
     except Exception as e:
         logger.error(f"Re-tagging failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1490,10 +1549,15 @@ async def analyze_documents(request: AnalyzeRequest):
             )
             matches = results.matches
         elif analysis_type == "selected":
+            # FIXED: Query each selected document individually to avoid top_k limitation
             if not selected_titles:
-                raise HTTPException(status_code=400, detail="selected_titles required for selected analysis_type")
+                raise HTTPException(status_code=400, detail="No documents selected for analysis")
+            
+            logger.info(f"Retrieving {len(selected_titles)} selected documents for Claude analysis")
+            
             for title in selected_titles:
-                partial = await pinecone_with_retry(
+                # Query with title filter (no top_k limit when filtering)
+                results = await pinecone_with_retry(
                     lambda: index.query(
                         vector=query_vector,
                         top_k=min(limit, 500),
