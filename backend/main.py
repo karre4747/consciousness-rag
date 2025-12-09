@@ -153,6 +153,14 @@ class QueryResponse(BaseModel):
     metadata: Dict[str, Any]
 
 
+class RetagRequest(BaseModel):
+    """Request model for re-tagging existing documents"""
+    document_titles: Optional[List[str]] = None  # None or empty = all documents
+    ai_provider: Optional[str] = "ollama"  # "ollama" (FREE) or "openai" (paid)
+    ollama_model: Optional[str] = "llama3.1"  # Ollama model to use
+    batch_size: Optional[int] = 50  # Process chunks in batches
+
+
 class AnalyzeRequest(BaseModel):
     """Request model for Claude deep analysis"""
     analysis_type: Optional[str] = "recent"  # "recent", "full", "selected"
@@ -714,6 +722,341 @@ async def check_duplicate(request: Dict[str, str]):
 
     except Exception as e:
         logger.error(f"Duplicate check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/verify-tagging")
+async def verify_tagging():
+    """
+    Verify which tagging passes have been applied to documents
+    
+    Returns:
+        Statistics showing:
+        - Total documents
+        - Documents with Pass 1 (keyword tags) - should be 100%
+        - Documents with Pass 2 (AI enhancement - primary_theme) - Ollama/OpenAI
+        - Documents with Pass 3 (Claude analysis) - not stored yet, would need separate tracking
+    """
+    try:
+        # Query Pinecone to get sample of documents
+        query_vector = [0.0] * PINECONE_DIMENSION
+        results = index.query(
+            vector=query_vector,
+            top_k=10000,  # Get all documents
+            include_metadata=True
+        )
+        
+        if not results.matches:
+            return {
+                "status": "success",
+                "message": "No documents found in database",
+                "total_documents": 0
+            }
+        
+        # Group by title and analyze tagging
+        documents_dict = {}
+        total_chunks = len(results.matches)
+        
+        for match in results.matches:
+            title = match.metadata.get('title', 'Unknown')
+            
+            if title not in documents_dict:
+                documents_dict[title] = {
+                    'title': title,
+                    'chunk_count': 0,
+                    'has_keyword_tags': False,
+                    'has_ai_enhancement': False,
+                    'sample_tags': [],
+                    'sample_primary_theme': None,
+                    'sample_categories': {}
+                }
+            
+            doc = documents_dict[title]
+            doc['chunk_count'] += 1
+            
+            # Check Pass 1: Keyword tags (should always exist)
+            tags = match.metadata.get('tags', [])
+            if tags and len(tags) > 0:
+                doc['has_keyword_tags'] = True
+                if not doc['sample_tags']:
+                    doc['sample_tags'] = tags[:10]  # First 10 tags
+            
+            # Check Pass 2: AI enhancement (primary_theme indicates Ollama/OpenAI was used)
+            primary_theme = match.metadata.get('primary_theme', '')
+            if primary_theme:
+                doc['has_ai_enhancement'] = True
+                if not doc['sample_primary_theme']:
+                    doc['sample_primary_theme'] = primary_theme
+            
+            # Sample categories
+            if not doc['sample_categories']:
+                doc['sample_categories'] = {
+                    'chakras': match.metadata.get('all_chakras', [])[:3],
+                    'traditions': match.metadata.get('all_traditions', [])[:3],
+                    'teachers': match.metadata.get('all_teachers', [])[:3],
+                    'consciousness_level': match.metadata.get('consciousness_level', '')
+                }
+        
+        # Calculate statistics
+        total_docs = len(documents_dict)
+        docs_with_keywords = sum(1 for d in documents_dict.values() if d['has_keyword_tags'])
+        docs_with_ai = sum(1 for d in documents_dict.values() if d['has_ai_enhancement'])
+        
+        # Sample a few documents for detailed view
+        sample_docs = list(documents_dict.values())[:5]
+        
+        return {
+            "status": "success",
+            "summary": {
+                "total_documents": total_docs,
+                "total_chunks": total_chunks,
+                "pass_1_keyword_tags": {
+                    "count": docs_with_keywords,
+                    "percentage": round((docs_with_keywords / total_docs * 100) if total_docs > 0 else 0, 1),
+                    "status": "✅ All documents tagged" if docs_with_keywords == total_docs else f"⚠️ {total_docs - docs_with_keywords} missing tags"
+                },
+                "pass_2_ai_enhancement": {
+                    "count": docs_with_ai,
+                    "percentage": round((docs_with_ai / total_docs * 100) if total_docs > 0 else 0, 1),
+                    "status": "✅ All enhanced" if docs_with_ai == total_docs else f"ℹ️ {total_docs - docs_with_ai} without AI enhancement (Ollama/OpenAI)"
+                },
+                "pass_3_claude_analysis": {
+                    "count": 0,
+                    "percentage": 0,
+                    "status": "ℹ️ Run 'Claude Deep Analysis' button to apply",
+                    "note": "Claude analysis finds cross-document connections and is separate from upload tagging"
+                }
+            },
+            "sample_documents": sample_docs
+        }
+        
+    except Exception as e:
+        logger.error(f"Tagging verification failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/retag-documents")
+async def retag_documents(request: RetagRequest):
+    """
+    Re-tag existing documents with AI enhancement (Pass 2)
+    
+    This endpoint:
+    1. Retrieves existing document chunks from Pinecone
+    2. Re-runs tagging with AI enhancement enabled (Ollama or OpenAI)
+    3. Updates metadata in Pinecone with enhanced tags
+    
+    Args:
+        document_titles: List of document titles to re-tag (None/empty = all documents)
+        ai_provider: "ollama" (FREE) or "openai" (paid)
+        ollama_model: Ollama model to use (default: "llama3.1")
+        batch_size: Number of chunks to process at once (default: 50)
+    
+    Returns:
+        Status with counts of documents and chunks processed
+    """
+    try:
+        ai_provider = request.ai_provider or "ollama"
+        ollama_model = request.ollama_model or "llama3.1"
+        batch_size = request.batch_size or 50
+        
+        logger.info(f"Starting re-tagging with AI provider: {ai_provider}")
+        
+        # Query Pinecone to get all chunks
+        query_vector = [0.0] * PINECONE_DIMENSION
+        
+        if request.document_titles and len(request.document_titles) > 0:
+            # Filter by specific titles
+            all_matches = []
+            for title in request.document_titles:
+                results = index.query(
+                    vector=query_vector,
+                    top_k=10000,
+                    include_metadata=True,
+                    filter={"title": title}
+                )
+                all_matches.extend(results.matches)
+            matches = all_matches
+        else:
+            # Get all documents
+            results = index.query(
+                vector=query_vector,
+                top_k=10000,
+                include_metadata=True
+            )
+            matches = results.matches
+        
+        if not matches:
+            return {
+                "status": "success",
+                "message": "No documents found to re-tag",
+                "documents_processed": 0,
+                "chunks_processed": 0
+            }
+        
+        # Group by document title
+        documents_dict = {}
+        for match in matches:
+            title = match.metadata.get('title', 'Unknown')
+            if title not in documents_dict:
+                documents_dict[title] = []
+            documents_dict[title].append(match)
+        
+        total_docs = len(documents_dict)
+        total_chunks = len(matches)
+        processed_chunks = 0
+        updated_chunks = 0
+        failed_chunks = 0
+        
+        logger.info(f"Found {total_docs} documents with {total_chunks} total chunks")
+        
+        # Process in batches
+        vectors_to_update = []
+        
+        for doc_title, doc_matches in documents_dict.items():
+            logger.info(f"Processing document: {doc_title} ({len(doc_matches)} chunks)")
+            
+            for match in doc_matches:
+                try:
+                    chunk_text = match.metadata.get('text', '')
+                    if not chunk_text:
+                        logger.warning(f"Skipping chunk {match.id} - no text found")
+                        continue
+                    
+                    # Re-generate tags with AI enhancement
+                    tags = generate_tags(
+                        chunk_text,
+                        use_ai=True,  # Enable AI enhancement
+                        ai_provider=ai_provider,
+                        title=doc_title,
+                        ollama_model=ollama_model
+                    )
+                    
+                    # Get existing metadata
+                    existing_metadata = match.metadata.copy()
+                    
+                    # Extract detected_categories for flattening
+                    detected_cats = tags.get("detected_categories", {})
+                    
+                    # Update metadata with enhanced tags
+                    updated_metadata = {
+                        **existing_metadata,  # Keep existing fields
+                        
+                        # Update core tags
+                        "tags": tags.get("tags", existing_metadata.get("tags", [])),
+                        "primary_theme": tags.get("primary_theme", existing_metadata.get("primary_theme", "")),
+                        "consciousness_level": tags.get("consciousness_level", existing_metadata.get("consciousness_level", "")),
+                        "emotions": tags.get("emotions", existing_metadata.get("emotions", [])),
+                        
+                        # Update primary fields
+                        "primary_chakra": tags.get("primary_chakra", existing_metadata.get("primary_chakra", "")),
+                        "tradition": tags.get("tradition", existing_metadata.get("tradition", "")),
+                        "teacher": tags.get("teacher", existing_metadata.get("teacher", "")),
+                        "ascension_path": tags.get("ascension_path", existing_metadata.get("ascension_path", "")),
+                        "bridge_concept": tags.get("bridge_concept", existing_metadata.get("bridge_concept", "")),
+                        "recovery_focus": tags.get("recovery_focus", existing_metadata.get("recovery_focus", "")),
+                        "healing_modality": tags.get("healing_modality", existing_metadata.get("healing_modality", "")),
+                        
+                        # Update comprehensive fields
+                        "all_chakras": detected_cats.get("chakras", existing_metadata.get("all_chakras", [])),
+                        "all_meridians": detected_cats.get("meridians", existing_metadata.get("all_meridians", [])),
+                        "all_12_steps": detected_cats.get("twelve_steps", existing_metadata.get("all_12_steps", [])),
+                        "all_consciousness_levels": detected_cats.get("consciousness_level", existing_metadata.get("all_consciousness_levels", [])),
+                        "all_traditions": detected_cats.get("traditions", existing_metadata.get("all_traditions", [])),
+                        "all_teachers": detected_cats.get("teachers", existing_metadata.get("all_teachers", [])),
+                        "all_quantum_physics": detected_cats.get("quantum_science", existing_metadata.get("all_quantum_physics", [])),
+                        "all_quantum_particles": detected_cats.get("quantum_particles", existing_metadata.get("all_quantum_particles", [])),
+                        "all_ascension_paths": detected_cats.get("ascension_paths", existing_metadata.get("all_ascension_paths", [])),
+                        "all_bridge_concepts": detected_cats.get("bridge_concepts", existing_metadata.get("all_bridge_concepts", [])),
+                        "all_universal_laws": detected_cats.get("universal_laws", existing_metadata.get("all_universal_laws", [])),
+                        "all_healing_modalities": detected_cats.get("healing_modalities", existing_metadata.get("all_healing_modalities", [])),
+                        "all_sacred_geometry": detected_cats.get("sacred_geometry", existing_metadata.get("all_sacred_geometry", [])),
+                        "all_subtle_bodies": detected_cats.get("subtle_bodies", existing_metadata.get("all_subtle_bodies", [])),
+                        "all_addiction_types": detected_cats.get("addiction_type", existing_metadata.get("all_addiction_types", []))
+                    }
+                    
+                    # Add program_level if detected
+                    if "program_level" in tags:
+                        updated_metadata["program_level"] = tags["program_level"]
+                    
+                    # Clean metadata for Pinecone
+                    updated_metadata = clean_metadata_for_pinecone(updated_metadata)
+                    
+                    # Get the existing embedding (we don't regenerate it)
+                    # We need to fetch it from Pinecone or keep the existing vector
+                    # For now, we'll need to query to get the vector, or we can just update metadata
+                    # Actually, we can use fetch to get the vectors
+                    
+                    vectors_to_update.append({
+                        "id": match.id,
+                        "metadata": updated_metadata
+                    })
+                    
+                    processed_chunks += 1
+                    
+                    # Update in batches
+                    if len(vectors_to_update) >= batch_size:
+                        # Fetch existing vectors to preserve embeddings
+                        ids_to_fetch = [v["id"] for v in vectors_to_update]
+                        fetched = index.fetch(ids=ids_to_fetch)
+                        
+                        # Prepare vectors with existing embeddings + updated metadata
+                        vectors_with_embeddings = []
+                        for vec_update in vectors_to_update:
+                            vec_id = vec_update["id"]
+                            if vec_id in fetched.vectors:
+                                existing_vector = fetched.vectors[vec_id]
+                                vectors_with_embeddings.append({
+                                    "id": vec_id,
+                                    "values": existing_vector.values,  # Keep existing embedding
+                                    "metadata": vec_update["metadata"]
+                                })
+                        
+                        if vectors_with_embeddings:
+                            index.upsert(vectors=vectors_with_embeddings)
+                            updated_chunks += len(vectors_with_embeddings)
+                            logger.info(f"Updated batch: {len(vectors_with_embeddings)} chunks")
+                        
+                        vectors_to_update = []
+                
+                except Exception as chunk_error:
+                    logger.error(f"Error processing chunk {match.id}: {chunk_error}")
+                    failed_chunks += 1
+                    continue
+        
+        # Process remaining vectors
+        if vectors_to_update:
+            ids_to_fetch = [v["id"] for v in vectors_to_update]
+            fetched = index.fetch(ids=ids_to_fetch)
+            
+            vectors_with_embeddings = []
+            for vec_update in vectors_to_update:
+                vec_id = vec_update["id"]
+                if vec_id in fetched.vectors:
+                    existing_vector = fetched.vectors[vec_id]
+                    vectors_with_embeddings.append({
+                        "id": vec_id,
+                        "values": existing_vector.values,
+                        "metadata": vec_update["metadata"]
+                    })
+            
+            if vectors_with_embeddings:
+                index.upsert(vectors=vectors_with_embeddings)
+                updated_chunks += len(vectors_with_embeddings)
+        
+        logger.info(f"Re-tagging complete: {updated_chunks} chunks updated, {failed_chunks} failed")
+        
+        return {
+            "status": "success",
+            "message": f"Re-tagged {total_docs} documents",
+            "documents_processed": total_docs,
+            "chunks_processed": processed_chunks,
+            "chunks_updated": updated_chunks,
+            "chunks_failed": failed_chunks,
+            "ai_provider": ai_provider
+        }
+        
+    except Exception as e:
+        logger.error(f"Re-tagging failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

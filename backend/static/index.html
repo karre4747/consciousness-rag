@@ -828,10 +828,23 @@
             </button>
         </div>
 
+        <!-- Tagging Management -->
+        <div class="analysis-section" id="taggingSection">
+            <h3>🏷️ Tagging Management</h3>
+            <p class="research-subtitle">Verify and enhance document tags</p>
+            <div class="analysis-actions">
+                <button class="analysis-btn" onclick="verifyTagging()" style="background: #00b894;">Verify Tagging Status</button>
+                <button class="analysis-btn" onclick="retagAllDocuments()" style="background: #0984e3;">Re-tag All with AI (Ollama)</button>
+                <button class="analysis-btn" onclick="retagAllDocumentsOpenAI()" style="background: #e17055;">Re-tag All with OpenAI</button>
+            </div>
+            <div class="analysis-status" id="taggingStatus">Click "Verify Tagging Status" to check your documents.</div>
+            <div class="analysis-results" id="taggingResults" style="display:none;"></div>
+        </div>
+
         <!-- Claude Deep Analysis -->
         <div class="analysis-section" id="analysisSection">
-            <h3>🧠 Claude Deep Analysis</h3>
-            <p class="research-subtitle">Run a semantic second-pass with Claude 4.5 on your library.</p>
+            <h3>🧠 Claude Deep Analysis (Pass 3)</h3>
+            <p class="research-subtitle">Run semantic analysis to find cross-document connections with Claude 4.5</p>
             <div class="analysis-actions">
                 <button class="analysis-btn" onclick="estimateAndRunAnalysis('recent', 50)">Analyze Recent (50)</button>
                 <button class="analysis-btn" onclick="estimateAndRunAnalysis('full', 0)">Analyze All</button>
@@ -1428,6 +1441,149 @@
 
             container.innerHTML = rendered;
             container.style.display = 'block';
+        }
+
+        // ========================================
+        // TAGGING MANAGEMENT FUNCTIONS
+        // ========================================
+
+        async function verifyTagging() {
+            const statusEl = document.getElementById('taggingStatus');
+            const resultsEl = document.getElementById('taggingResults');
+            
+            statusEl.textContent = 'Checking tagging status...';
+            resultsEl.style.display = 'none';
+            
+            try {
+                const response = await fetch('/verify-tagging');
+                const data = await response.json();
+                
+                if (data.status !== 'success') {
+                    statusEl.textContent = 'Verification failed.';
+                    return;
+                }
+                
+                const summary = data.summary;
+                const sampleDocs = data.sample_documents || [];
+                
+                statusEl.textContent = `Found ${summary.total_documents} documents with ${summary.total_chunks} total chunks.`;
+                
+                // Display results
+                let resultsHTML = `
+                    <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 15px;">
+                        <h4 style="color: #667eea; margin-bottom: 15px;">Tagging Status Summary</h4>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <h5>Pass 1: Keyword Tags</h5>
+                            <p><strong>${summary.pass_1_keyword_tags.count}/${summary.total_documents}</strong> documents (${summary.pass_1_keyword_tags.percentage}%)</p>
+                            <p style="color: #00b894;">${summary.pass_1_keyword_tags.status}</p>
+                        </div>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <h5>Pass 2: AI Enhancement (Ollama/OpenAI)</h5>
+                            <p><strong>${summary.pass_2_ai_enhancement.count}/${summary.total_documents}</strong> documents (${summary.pass_2_ai_enhancement.percentage}%)</p>
+                            <p style="color: ${summary.pass_2_ai_enhancement.count === summary.total_documents ? '#00b894' : '#f39c12'};">${summary.pass_2_ai_enhancement.status}</p>
+                        </div>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <h5>Pass 3: Claude Deep Analysis</h5>
+                            <p>${summary.pass_3_claude_analysis.status}</p>
+                            <p style="font-size: 0.9em; color: #666;">${summary.pass_3_claude_analysis.note}</p>
+                        </div>
+                        
+                        <h5 style="margin-top: 25px;">Sample Documents:</h5>
+                        <div style="max-height: 300px; overflow-y: auto;">
+                `;
+                
+                sampleDocs.forEach(doc => {
+                    const hasAI = doc.has_ai_enhancement ? '✅' : '❌';
+                    resultsHTML += `
+                        <div style="border-bottom: 1px solid #eee; padding: 10px 0;">
+                            <strong>${escapeHtml(doc.title)}</strong> (${doc.chunk_count} chunks)
+                            <br>Keyword Tags: ${doc.has_keyword_tags ? '✅' : '❌'} | AI Enhancement: ${hasAI}
+                            ${doc.sample_tags.length > 0 ? `<br>Sample tags: ${doc.sample_tags.slice(0, 5).map(t => escapeHtml(t)).join(', ')}` : ''}
+                            ${doc.sample_primary_theme ? `<br>Primary Theme: ${escapeHtml(doc.sample_primary_theme.substring(0, 100))}...` : ''}
+                        </div>
+                    `;
+                });
+                
+                resultsHTML += '</div></div>';
+                resultsEl.innerHTML = resultsHTML;
+                resultsEl.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Verification failed:', error);
+                statusEl.textContent = 'Verification failed. Check console for details.';
+            }
+        }
+
+        async function retagAllDocuments() {
+            if (!confirm('This will re-tag ALL documents with Ollama AI enhancement (FREE). This may take a while. Continue?')) {
+                return;
+            }
+            
+            const statusEl = document.getElementById('taggingStatus');
+            statusEl.textContent = 'Re-tagging all documents with Ollama... This may take several minutes.';
+            
+            try {
+                const response = await fetch('/retag-documents', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        document_titles: null,  // null = all documents
+                        ai_provider: 'ollama',
+                        ollama_model: 'llama3.1',
+                        batch_size: 50
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    statusEl.textContent = `✅ Successfully re-tagged ${data.documents_processed} documents (${data.chunks_updated} chunks updated).`;
+                    // Refresh verification
+                    setTimeout(() => verifyTagging(), 2000);
+                } else {
+                    statusEl.textContent = `Re-tagging failed: ${data.message || 'Unknown error'}`;
+                }
+            } catch (error) {
+                console.error('Re-tagging failed:', error);
+                statusEl.textContent = 'Re-tagging failed. Check console for details.';
+            }
+        }
+
+        async function retagAllDocumentsOpenAI() {
+            if (!confirm('This will re-tag ALL documents with OpenAI (costs ~$0.40 per 1000 documents). Continue?')) {
+                return;
+            }
+            
+            const statusEl = document.getElementById('taggingStatus');
+            statusEl.textContent = 'Re-tagging all documents with OpenAI... This may take several minutes.';
+            
+            try {
+                const response = await fetch('/retag-documents', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        document_titles: null,  // null = all documents
+                        ai_provider: 'openai',
+                        batch_size: 50
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    statusEl.textContent = `✅ Successfully re-tagged ${data.documents_processed} documents (${data.chunks_updated} chunks updated).`;
+                    // Refresh verification
+                    setTimeout(() => verifyTagging(), 2000);
+                } else {
+                    statusEl.textContent = `Re-tagging failed: ${data.message || 'Unknown error'}`;
+                }
+            } catch (error) {
+                console.error('Re-tagging failed:', error);
+                statusEl.textContent = 'Re-tagging failed. Check console for details.';
+            }
         }
 
         // ========================================
