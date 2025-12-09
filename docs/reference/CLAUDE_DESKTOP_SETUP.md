@@ -634,16 +634,21 @@ Use this to verify your setup:
 
 Once Claude Desktop is connected:
 
-1. **Upload Your Content**
+1. **Read the Coding Guide** ⭐ **IMPORTANT**
+   - See `CLAUDE_CODING_GUIDE.md` for explicit instructions when working on the codebase
+   - This guide tells Claude Desktop how to follow the development plan and maintain code quality
+   - Essential reading before making any code changes
+
+2. **Upload Your Content**
    - Use the web interface at `http://localhost:8000`
    - Or use `ingest_content.py` for batch uploads
 
-2. **Start Researching**
+3. **Start Researching**
    - Ask Claude questions about your consciousness library
    - Use for course content creation
    - Explore connections across traditions
 
-3. **Review Testing Guide**
+4. **Review Testing Guide**
    - See `TESTING_GUIDE.md` for comprehensive test scenarios
    - Learn advanced query techniques
 
