@@ -395,7 +395,7 @@
 
         .doc-item {
             display: grid;
-            grid-template-columns: 3fr 1fr 100px;
+            grid-template-columns: 40px 3fr 1fr 100px;
             gap: 15px;
             padding: 15px;
             border-bottom: 1px solid #eee;
@@ -459,6 +459,62 @@
             padding: 30px;
             margin: 30px 0;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Analysis Section */
+        .analysis-section {
+            background: linear-gradient(135deg, #f8f9ff 0%, #f5f9ff 100%);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .analysis-section h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .analysis-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 15px 0;
+        }
+
+        .analysis-btn {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 10px;
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .analysis-btn:hover {
+            background: #764ba2;
+            transform: translateY(-1px);
+        }
+
+        .analysis-status {
+            background: #f8f9ff;
+            border-radius: 10px;
+            padding: 12px 15px;
+            margin-top: 10px;
+            color: #555;
+            font-size: 0.95em;
+        }
+
+        .analysis-results {
+            margin-top: 15px;
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
 
         .research-section h3 {
@@ -772,6 +828,19 @@
             </button>
         </div>
 
+        <!-- Claude Deep Analysis -->
+        <div class="analysis-section" id="analysisSection">
+            <h3>🧠 Claude Deep Analysis</h3>
+            <p class="research-subtitle">Run a semantic second-pass with Claude 4.5 on your library.</p>
+            <div class="analysis-actions">
+                <button class="analysis-btn" onclick="estimateAndRunAnalysis('recent', 50)">Analyze Recent (50)</button>
+                <button class="analysis-btn" onclick="estimateAndRunAnalysis('full', 0)">Analyze All</button>
+                <button class="analysis-btn" onclick="estimateAndRunAnalysis('selected', 0)">Analyze Selected</button>
+            </div>
+            <div class="analysis-status" id="analysisStatus">No analysis started yet.</div>
+            <div class="analysis-results" id="analysisResults" style="display:none;"></div>
+        </div>
+
         <!-- Uploaded Documents List -->
         <div class="uploaded-docs-section" id="uploadedDocsSection">
             <h3>📚 Uploaded Documents</h3>
@@ -1060,6 +1129,7 @@
 
                 docsList.innerHTML = data.documents.map(doc => `
                     <div class="doc-item" data-title="${escapeHtml(doc.title)}">
+                        <div><input type="checkbox" class="doc-select" value="${escapeHtml(doc.title)}"></div>
                         <div class="doc-title">${escapeHtml(doc.title)}</div>
                         <div class="doc-chunks">${doc.chunk_count} chunks</div>
                         <div class="doc-actions">
@@ -1173,10 +1243,192 @@
             return div.innerHTML;
         }
 
+        // ========================================
+        // SPENDING DASHBOARD
+        // ========================================
+
+        async function loadSpendingDashboard() {
+            try {
+                const response = await fetch('/spending-dashboard');
+                const data = await response.json();
+                if (data.status === 'success') {
+                    updateDashboardUI(data.stats);
+                }
+            } catch (error) {
+                console.error('Failed to load spending dashboard:', error);
+            }
+        }
+
+        function updateDashboardUI(stats) {
+            document.getElementById('spentThisMonth').textContent = `$${stats.total_cost.toFixed(2)}`;
+            document.getElementById('remainingBudget').textContent = `$${stats.remaining_budget.toFixed(2)}`;
+            document.getElementById('monthlyCap').textContent = `$${stats.monthly_cap.toFixed(2)}`;
+            document.getElementById('docsAnalyzed').innerHTML =
+                `📊 <strong>${stats.analyses_count || 0} analyses</strong> (~${stats.estimated_pages_analyzed || 0} pages)`;
+            document.getElementById('analysesCount').innerHTML =
+                `🔄 <strong>${stats.analyses_count || 0} analyses</strong> performed this month`;
+            document.getElementById('tokensProcessed').innerHTML =
+                `📈 <strong>${stats.total_input_tokens || 0} tokens</strong> processed`;
+
+            const progress = Math.min(100, Math.round(stats.budget_used_percentage || 0));
+            const bar = document.getElementById('budgetProgress');
+            bar.style.width = `${progress}%`;
+            bar.textContent = `${progress}% Used`;
+        }
+
+        async function changeSpendingCap() {
+            const newCap = prompt("Enter new monthly cap:", "40");
+            if (!newCap) return;
+            try {
+                await fetch('/update-spending-cap', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({new_cap: parseFloat(newCap)})
+                });
+                await loadSpendingDashboard();
+            } catch (error) {
+                console.error('Failed to update cap:', error);
+            }
+        }
+
+        async function showSpendingHistory() {
+            try {
+                const response = await fetch('/spending-dashboard');
+                const data = await response.json();
+                const history = data.history || [];
+                const rows = history.map(item => `
+                    <div class="history-item">
+                        <div>${escapeHtml(item.created_at || '')}</div>
+                        <div>${escapeHtml(item.analysis_type || '')}</div>
+                        <div>${item.document_count || 0} docs</div>
+                        <div>$${(item.total_cost || 0).toFixed(2)}</div>
+                        <div>${item.total_input_tokens || 0} tokens</div>
+                    </div>
+                `).join('') || '<div class="no-results">No history yet</div>';
+
+                const modalHTML = `
+                    <h3>📊 Claude Spending History</h3>
+                    <div class="budget-status">
+                        <strong>Cap:</strong> $${(data.stats?.monthly_cap || 0).toFixed(2)} |
+                        <strong>Spent:</strong> $${(data.stats?.total_cost || 0).toFixed(2)} |
+                        <strong>Remaining:</strong> $${(data.stats?.remaining_budget || 0).toFixed(2)}
+                    </div>
+                    <div class="history-item" style="font-weight:700;">
+                        <div>Date</div><div>Type</div><div>Docs</div><div>Cost</div><div>Tokens</div>
+                    </div>
+                    ${rows}
+                `;
+                showModal(modalHTML);
+            } catch (error) {
+                console.error('Failed to load history:', error);
+            }
+        }
+
+        function showModal(content) {
+            document.getElementById('modalContent').innerHTML = content;
+            document.getElementById('modalOverlay').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').style.display = 'none';
+        }
+
+        function updateCurrentMonth() {
+            const now = new Date();
+            const monthNames = ["January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"];
+            document.getElementById('currentMonth').textContent =
+                `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+        }
+
         // Initialize on page load
         window.addEventListener('DOMContentLoaded', () => {
+            updateCurrentMonth();
+            loadSpendingDashboard();
             loadDocumentList();
         });
+
+        // ========================================
+        // CLAUDE DEEP ANALYSIS
+        // ========================================
+
+        function getSelectedTitles() {
+            return Array.from(document.querySelectorAll('.doc-select:checked')).map(cb => cb.value);
+        }
+
+        async function estimateAndRunAnalysis(type, limit = 50) {
+            const analysisStatus = document.getElementById('analysisStatus');
+            const selected = type === 'selected' ? getSelectedTitles() : [];
+            if (type === 'selected' && selected.length === 0) {
+                alert('Select at least one document to analyze.');
+                return;
+            }
+
+            analysisStatus.textContent = 'Estimating cost...';
+            try {
+                const payload = {
+                    analysis_type: type,
+                    limit: limit,
+                    selected_titles: selected
+                };
+
+                const response = await fetch('/analyze-documents', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'budget_exceeded') {
+                    analysisStatus.textContent = `Budget exceeded. Estimated cost $${data.estimate?.total_cost?.toFixed(2) || 0}. Remaining ${data.budget?.remaining || 0}.`;
+                    return;
+                }
+
+                if (data.status !== 'success') {
+                    analysisStatus.textContent = data.message || 'Analysis failed.';
+                    return;
+                }
+
+                analysisStatus.textContent = `Analyzed ${data.documents_analyzed} documents. Rendering results...`;
+                displayAnalysisResults(data);
+                await loadSpendingDashboard();
+            } catch (error) {
+                console.error('Analysis failed:', error);
+                analysisStatus.textContent = 'Analysis failed. Check console.';
+            }
+        }
+
+        function displayAnalysisResults(result) {
+            const container = document.getElementById('analysisResults');
+            if (!result || !result.batches) {
+                container.style.display = 'none';
+                return;
+            }
+
+            const rendered = result.batches.map((batch, idx) => {
+                const analysis = batch.analysis || {};
+                const themes = (analysis.cross_document_themes || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
+                const patterns = (analysis.consciousness_patterns || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
+                const synth = (analysis.synthesis_opportunities || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
+                const connections = (analysis.suggested_connections || []).map(c =>
+                    `<li>${escapeHtml(c.doc_id || '')} → ${escapeHtml(c.relates_to || '')}: ${escapeHtml(c.connection || '')}</li>`
+                ).join('') || '<li>None</li>';
+
+                return `
+                    <div style="border-bottom:1px solid #eee; padding:10px 0;">
+                        <h4>Batch ${idx + 1} (${batch.documents_analyzed} docs)</h4>
+                        <div><strong>Themes:</strong><ul>${themes}</ul></div>
+                        <div><strong>Patterns:</strong><ul>${patterns}</ul></div>
+                        <div><strong>Synthesis:</strong><ul>${synth}</ul></div>
+                        <div><strong>Connections:</strong><ul>${connections}</ul></div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = rendered;
+            container.style.display = 'block';
+        }
 
         // ========================================
         // RESEARCH ASSISTANT / QUERY INTERFACE

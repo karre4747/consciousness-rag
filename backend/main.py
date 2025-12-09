@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
+import asyncio
 import logging
 
 # Import our modules
@@ -32,7 +33,7 @@ from pinecone import Pinecone, ServerlessSpec
 from openai import OpenAI
 from anthropic import Anthropic
 import tiktoken
-from tagging import generate_tags
+from tagging import generate_tags, claude_second_pass_analysis
 from spending_tracker import SpendingTracker
 from cost_estimator import estimate_claude_cost
 
@@ -150,6 +151,14 @@ class QueryResponse(BaseModel):
     answer: str
     sources: List[Dict[str, Any]]
     metadata: Dict[str, Any]
+
+
+class AnalyzeRequest(BaseModel):
+    """Request model for Claude deep analysis"""
+    analysis_type: Optional[str] = "recent"  # "recent", "full", "selected"
+    limit: Optional[int] = 50
+    filters: Optional[Dict[str, Any]] = None
+    selected_titles: Optional[List[str]] = None
 
 
 # === HELPER FUNCTIONS ===
@@ -524,6 +533,10 @@ async def query_knowledge(request: QueryRequest):
     """
     try:
         logger.info(f"Processing query: {request.question}")
+
+        # Validate and clamp top_k to prevent slow queries
+        requested_top_k = request.top_k or 5
+        top_k = max(1, min(20, requested_top_k))
         
         # Generate embedding for question
         question_embedding = generate_embedding(request.question)
@@ -536,7 +549,7 @@ async def query_knowledge(request: QueryRequest):
         # Query Pinecone
         query_response = index.query(
             vector=question_embedding,
-            top_k=request.top_k,
+            top_k=top_k,
             include_metadata=True,
             filter=filter_dict if filter_dict else None
         )
@@ -551,12 +564,19 @@ async def query_knowledge(request: QueryRequest):
                 metadata={"matches_found": 0}
             )
         
-        # Generate answer using Claude
-        answer = generate_answer(
-            request.question,
-            matches,
-            request.program_level or "beginner"
-        )
+        # Generate answer using Claude with timeout to avoid long-running requests
+        try:
+            answer = await asyncio.wait_for(
+                asyncio.to_thread(
+                    generate_answer,
+                    request.question,
+                    matches,
+                    request.program_level or "beginner"
+                ),
+                timeout=30
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Answer generation timed out. Please try again.")
         
         # Format sources with full text and metadata for UI display
         sources = [
@@ -884,6 +904,122 @@ async def estimate_analysis_cost(request: Dict[str, Any]):
 
     except Exception as e:
         logger.error(f"Cost estimation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analyze-documents")
+async def analyze_documents(request: AnalyzeRequest):
+    """
+    Run Claude second-pass analysis on documents in batches with budget enforcement.
+    """
+    try:
+        analysis_type = request.analysis_type or "recent"
+        limit = request.limit or 50
+        filters = request.filters
+        selected_titles = request.selected_titles or []
+
+        # Retrieve documents from Pinecone
+        query_vector = [0.0] * PINECONE_DIMENSION
+        matches = []
+
+        if analysis_type == "recent":
+            results = index.query(
+                vector=query_vector,
+                top_k=min(limit, 10000),
+                include_metadata=True
+            )
+            matches = results.matches
+        elif analysis_type == "full":
+            results = index.query(
+                vector=query_vector,
+                top_k=10000,
+                include_metadata=True
+            )
+            matches = results.matches
+        elif analysis_type == "theme":
+            results = index.query(
+                vector=query_vector,
+                top_k=10000,
+                include_metadata=True,
+                filter=filters or {}
+            )
+            matches = results.matches
+        elif analysis_type == "selected":
+            if not selected_titles:
+                raise HTTPException(status_code=400, detail="selected_titles required for selected analysis_type")
+            for title in selected_titles:
+                partial = index.query(
+                    vector=query_vector,
+                    top_k=min(limit, 500),
+                    include_metadata=True,
+                    filter={"title": title}
+                )
+                matches.extend(partial.matches)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid analysis_type")
+
+        documents = [
+            {
+                "id": match.id,
+                "text": match.metadata.get("text", ""),
+                "tags": match.metadata.get("tags", []),
+                "title": match.metadata.get("title", "Unknown")
+            }
+            for match in matches if match and getattr(match, "metadata", None)
+        ]
+
+        if not documents:
+            return {
+                "status": "success",
+                "message": "No documents found to analyze",
+                "documents_found": 0
+            }
+
+        # Estimate cost using existing estimator
+        estimate = estimate_claude_cost([{"metadata": m.metadata} for m in matches], batch_size=15)
+
+        budget_ok = spending_tracker.can_afford(estimate.get("total_cost", 0))
+        if not budget_ok.get("can_afford", True):
+            return {
+                "status": "budget_exceeded",
+                "estimate": estimate,
+                "budget": budget_ok
+            }
+
+        # Run analysis in batches of 15 documents
+        batch_size = 15
+        batch_results = []
+        for start in range(0, len(documents), batch_size):
+            batch_docs = documents[start:start + batch_size]
+            analysis = claude_second_pass_analysis(batch_docs, batch_size=batch_size)
+            batch_results.append({
+                "batch_start": start,
+                "batch_end": start + len(batch_docs) - 1,
+                "documents_analyzed": len(batch_docs),
+                "analysis": analysis
+            })
+
+        # Record spending
+        spending_tracker.record_analysis({
+            "analysis_type": analysis_type,
+            "document_count": len(documents),
+            "total_cost": estimate.get("total_cost", 0),
+            "input_tokens": estimate.get("total_input_tokens", 0),
+            "output_tokens": estimate.get("total_output_tokens", 0)
+        })
+
+        return {
+            "status": "success",
+            "analysis_type": analysis_type,
+            "documents_analyzed": len(documents),
+            "estimate": estimate,
+            "batches": batch_results
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Analyze documents failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

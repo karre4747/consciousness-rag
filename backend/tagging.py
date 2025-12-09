@@ -496,7 +496,7 @@ def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "ollama", 
     return keyword_tags
 
 
-def claude_second_pass_analysis(documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int = 15) -> Dict[str, Any]:
     """
     PASS 2: Claude analyzes ALL documents together to find deep connections
     Run this AFTER upload is complete, as a background job
@@ -508,15 +508,16 @@ def claude_second_pass_analysis(documents: List[Dict[str, Any]]) -> Dict[str, An
         Dict with enhanced semantic connections and relationships
     """
 
-    # Build context from all documents
+    # Build context from limited batch to control token use
+    limited_docs = documents[:batch_size]
     context = "\n\n---\n\n".join([
         f"DOC {i+1} [{doc.get('id')}]:\n{doc.get('text', '')[:500]}...\nCurrent tags: {doc.get('tags', [])}"
-        for i, doc in enumerate(documents[:20])  # Analyze up to 20 docs at once
+        for i, doc in enumerate(limited_docs)
     ])
 
     prompt = f"""You are analyzing a consciousness and spiritual transformation database.
 
-Review these {len(documents[:20])} documents and identify:
+Review these {len(limited_docs)} documents and identify:
 1. Deep thematic connections across documents
 2. Quantum/consciousness patterns
 3. Cross-tradition synthesis opportunities
