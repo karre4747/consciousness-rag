@@ -528,12 +528,13 @@ async def upload_document(request: UploadRequest):
                     embedding = generate_embedding(clean_chunk)
 
                     # Generate tags (pass title for program_level detection and AI provider)
-                    tags = generate_tags(
+                    tags = await generate_tags(
                         clean_chunk,
                         use_ai=request.use_ai_tagging,
                         ai_provider=request.ai_provider,
                         title=request.title,
-                        ollama_model=request.ollama_model
+                        ollama_model=request.ollama_model,
+                        openai_client=openai_client
                     )
 
                     # Create metadata with all enhanced tags
@@ -1071,12 +1072,13 @@ async def retag_documents(request: RetagRequest):
                         continue
                     
                     # Re-generate tags with AI enhancement
-                    tags = generate_tags(
+                    tags = await generate_tags(
                         chunk_text,
                         use_ai=True,  # Enable AI enhancement
                         ai_provider=ai_provider,
                         title=doc_title,
-                        ollama_model=ollama_model
+                        ollama_model=ollama_model,
+                        openai_client=openai_client
                     )
                     
                     # Get existing metadata

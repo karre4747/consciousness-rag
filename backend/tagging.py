@@ -372,11 +372,24 @@ Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), 
         return generate_tags_keyword_based(text)
 
 
-def generate_tags_openai(text: str, max_tokens: int = 300) -> Dict[str, Any]:
+async def generate_tags_openai(text: str, openai_client, max_tokens: int = 300, timeout: float = 15.0) -> Dict[str, Any]:
     """
     PASS 1: Use OpenAI GPT-3.5-turbo for fast, cheap initial tagging during upload
     This replaces the expensive Claude call with a $0.50/1M token model
+    
+    Args:
+        text: Text to analyze
+        openai_client: OpenAI client instance (reused from main.py)
+        max_tokens: Maximum tokens for response
+        timeout: Timeout in seconds (default: 15.0)
+    
+    Returns:
+        Dictionary with tags and metadata
     """
+    import asyncio
+    import json
+    import random
+    from openai import OpenAIError, RateLimitError, APITimeoutError, APIConnectionError
 
     prompt = f"""Analyze this consciousness/spiritual text and identify relevant tags.
 
@@ -392,31 +405,71 @@ Return ONLY valid JSON with these fields:
 
 Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies"""
 
-    try:
-        client = get_openai_client()
-        response = client.chat.completions.create(
+    max_retries = 3
+    base_delay = 1
+    max_delay = 30
+
+    def _call_openai():
+        """Synchronous OpenAI API call"""
+        return openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
             temperature=0.3
         )
 
-        import json
-        response_text = response.choices[0].message.content
-
-        # Parse JSON response
+    for attempt in range(max_retries):
         try:
-            ai_tags = json.loads(response_text)
-            return ai_tags
-        except json.JSONDecodeError:
+            # Run blocking OpenAI call in thread pool with timeout
+            response = await asyncio.wait_for(
+                asyncio.to_thread(_call_openai),
+                timeout=timeout
+            )
+
+            response_text = response.choices[0].message.content
+
+            # Parse JSON response
+            try:
+                ai_tags = json.loads(response_text)
+                return ai_tags
+            except json.JSONDecodeError:
+                # Fallback to keyword-based tags if JSON parsing fails
+                return generate_tags_keyword_based(text)
+
+        except asyncio.TimeoutError:
+            if attempt == max_retries - 1:
+                print(f"OpenAI tagging timed out after {max_retries} attempts, using keyword-based tags")
+                return generate_tags_keyword_based(text)
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            jitter = random.uniform(0, delay * 0.1)
+            print(f"OpenAI timeout, retrying in {delay + jitter:.2f}s (attempt {attempt + 1}/{max_retries})")
+            await asyncio.sleep(delay + jitter)
+
+        except (RateLimitError, APIConnectionError) as e:
+            # Retry on rate limits and connection errors
+            if attempt == max_retries - 1:
+                print(f"OpenAI rate limit/connection error after {max_retries} attempts: {e}, using keyword-based tags")
+                return generate_tags_keyword_based(text)
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            jitter = random.uniform(0, delay * 0.1)
+            print(f"OpenAI rate limit/connection error, retrying in {delay + jitter:.2f}s (attempt {attempt + 1}/{max_retries})")
+            await asyncio.sleep(delay + jitter)
+
+        except OpenAIError as e:
+            # Don't retry on other OpenAI errors (e.g., invalid API key, bad request)
+            print(f"OpenAI error (not retrying): {e}, using keyword-based tags")
             return generate_tags_keyword_based(text)
 
-    except Exception as e:
-        print(f"OpenAI tagging failed: {e}, using keyword-based tags")
-        return generate_tags_keyword_based(text)
+        except Exception as e:
+            # Unexpected errors - don't retry
+            print(f"Unexpected error during OpenAI tagging: {e}, using keyword-based tags")
+            return generate_tags_keyword_based(text)
+
+    # Fallback if all retries exhausted
+    return generate_tags_keyword_based(text)
 
 
-def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "ollama", title: str = "", ollama_model: str = "llama3.1") -> Dict[str, Any]:
+async def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "ollama", title: str = "", ollama_model: str = "llama3.1", openai_client=None) -> Dict[str, Any]:
     """
     Main tagging function combining keyword and AI tagging
 
@@ -426,6 +479,7 @@ def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "ollama", 
         ai_provider: "ollama" (FREE, local) or "openai" (paid but faster) - default: "ollama"
         title: Document title (used for program_level detection in addiction content)
         ollama_model: Ollama model to use (default: "llama3.1")
+        openai_client: OpenAI client instance (required if ai_provider="openai")
 
     Returns:
         Dictionary with tags and metadata
@@ -453,9 +507,12 @@ def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "ollama", 
         try:
             # Choose AI provider
             if ai_provider == "ollama":
+                # Ollama is still synchronous (local call)
                 ai_tags = generate_tags_ollama(text, model=ollama_model)
             elif ai_provider == "openai":
-                ai_tags = generate_tags_openai(text)
+                if not openai_client:
+                    raise ValueError("openai_client is required when ai_provider='openai'")
+                ai_tags = await generate_tags_openai(text, openai_client)
             else:
                 print(f"Unknown AI provider: {ai_provider}, using keyword-based tags")
                 ai_tags = {}
