@@ -93,10 +93,9 @@ async def test_ai_tagging():
         
         tags = await generate_tags(
             text=sample_text,
-            existing_tags=[],
-            ai_provider="openai", # Fallback to OpenAI as it's more likely running than local Ollama on droplet maybe?
-                                  # Wait, user has Ollama on droplet? Maybe.
-            check_cost=False 
+            use_ai=True,
+            ai_provider="openai", 
+            title=title
         )
         
         print(f"✅ Tagging Function Returned Result")
