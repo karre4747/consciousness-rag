@@ -215,7 +215,7 @@ async def pinecone_with_retry(func, max_retries=3, base_delay=1, max_delay=60, t
             )
         except asyncio.TimeoutError:
             if attempt == max_retries - 1:
-                raise HTTPException(status_code=504, detail="Pinecone operation timed out")
+                raise  # Re-raise TimeoutError so endpoint handlers can catch it
             delay = min(base_delay * (2 ** attempt), max_delay)
             jitter = random.uniform(0, delay * 0.1)
             logger.warning(f"Pinecone timeout, retrying in {delay + jitter:.2f}s (attempt {attempt + 1}/{max_retries})")
@@ -231,8 +231,8 @@ async def pinecone_with_retry(func, max_retries=3, base_delay=1, max_delay=60, t
             if attempt == max_retries - 1:
                 raise
             
-            # Retry on 5xx or 429
-            if status_code and (status_code >= 500 or status_code == 429):
+            # Retry on 5xx, 429, or None (transient errors like connection issues)
+            if status_code is None or status_code >= 500 or status_code == 429:
                 delay = min(base_delay * (2 ** attempt), max_delay)
                 jitter = random.uniform(0, delay * 0.1)
                 logger.warning(f"Pinecone error {status_code}, retrying in {delay + jitter:.2f}s (attempt {attempt + 1}/{max_retries})")
