@@ -1588,7 +1588,7 @@ async def analyze_documents(request: AnalyzeRequest):
                     max_retries=2,
                     timeout=15.0
                 )
-                matches.extend(partial.matches)
+                matches.extend(results.matches)
         else:
             raise HTTPException(status_code=400, detail="Invalid analysis_type")
 
