@@ -658,7 +658,25 @@ async def query_knowledge(request: QueryRequest):
         question_embedding = generate_embedding(request.question)
         
         # Build filter
-        filter_dict = request.filters or {}
+        filter_dict = {}
+        raw_filters = request.filters or {}
+        
+        # Handle Focus Area mapping (Frontend sends 'focus_area', Pinecone needs specific fields)
+        if "focus_area" in raw_filters:
+            focus = raw_filters["focus_area"]
+            # Remove the raw key so we don't send invalid metadata to Pinecone
+            if focus == "12-step":
+                # Filter for docs that have ANY recovery focus
+                filter_dict["recovery_focus"] = {"$ne": ""}
+            elif focus == "chakras":
+                # Filter for docs that discuss chakras
+                filter_dict["primary_chakra"] = {"$ne": ""}
+            elif focus == "astrology":
+                filter_dict["tags"] = "Astrology"
+            elif focus == "mystical":
+                filter_dict["tags"] = "Mysticism"
+        
+        # Add program level if specified
         if request.program_level:
             filter_dict["program_level"] = request.program_level
         
@@ -693,7 +711,7 @@ async def query_knowledge(request: QueryRequest):
                     matches,
                     request.program_level or "beginner"
                 ),
-                timeout=30
+                timeout=90
             )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Answer generation timed out. Please try again.")
