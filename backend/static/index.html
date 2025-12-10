@@ -1000,8 +1000,6 @@
                     <button class="analysis-btn" onclick="estimateAndRunAnalysis('full', 0)">Analyze All</button>
                     <button class="analysis-btn" onclick="estimateAndRunAnalysis('selected', 0)">Analyze
                         Selected</button>
-                    <button class="analysis-btn" onclick="estimateAndRunAnalysis('selected', 0)">Analyze
-                        Selected</button>
                 </div>
 
                 <!-- Document Selection Area -->
@@ -1608,7 +1606,10 @@
         // ========================================
 
         function getSelectedTitles() {
-            return Array.from(document.querySelectorAll('.doc-select:checked')).map(cb => cb.value);
+            // Only get checked boxes from the currently active tab
+            const activeTab = document.querySelector('.tab-content.active');
+            if (!activeTab) return [];
+            return Array.from(activeTab.querySelectorAll('.doc-select:checked')).map(cb => cb.value);
         }
 
         async function estimateAndRunAnalysis(type, limit = 50) {
