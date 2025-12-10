@@ -629,6 +629,9 @@ async def upload_document(request: UploadRequest):
             "vectors_uploaded": total_uploaded
         }
 
+    except asyncio.TimeoutError:
+        logger.error("Upload timed out waiting for Pinecone")
+        raise HTTPException(status_code=504, detail="Upload timed out - please try again")
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -728,6 +731,9 @@ async def query_knowledge(request: QueryRequest):
             }
         )
         
+    except asyncio.TimeoutError:
+        logger.error("Query timed out waiting for Pinecone")
+        raise HTTPException(status_code=504, detail="Query timed out - please try again")
     except Exception as e:
         logger.error(f"Query failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -927,6 +933,9 @@ async def check_duplicate(request: Dict[str, str]):
             "title": title
         }
 
+    except asyncio.TimeoutError:
+        logger.error("Duplicate check timed out")
+        raise HTTPException(status_code=504, detail="Duplicate check timed out - please try again")
     except Exception as e:
         logger.error(f"Duplicate check failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1041,6 +1050,9 @@ async def verify_tagging():
             "sample_documents": sample_docs
         }
         
+    except asyncio.TimeoutError:
+        logger.error("Tagging verification timed out")
+        raise HTTPException(status_code=504, detail="Tagging verification timed out - please try again")
     except Exception as e:
         logger.error(f"Tagging verification failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1284,6 +1296,9 @@ async def retag_documents(request: RetagRequest):
             "chunks_failed": failed_chunks
         }
     
+    except asyncio.TimeoutError:
+        logger.error("Re-tagging timed out waiting for Pinecone")
+        raise HTTPException(status_code=504, detail="Re-tagging timed out - please try again")
     except Exception as e:
         logger.error(f"Re-tagging failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1339,6 +1354,9 @@ async def delete_document(title: str):
             "chunks_deleted": len(ids_to_delete)
         }
 
+    except asyncio.TimeoutError:
+        logger.error(f"Delete timed out for '{title}'")
+        raise HTTPException(status_code=504, detail="Delete operation timed out - please try again")
     except Exception as e:
         logger.error(f"Delete failed for '{title}': {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1494,6 +1512,9 @@ async def estimate_analysis_cost(request: Dict[str, Any]):
             "analysis_type": analysis_type
         }
 
+    except asyncio.TimeoutError:
+        logger.error("Cost estimation timed out waiting for Pinecone")
+        raise HTTPException(status_code=504, detail="Cost estimation timed out - please try again")
     except Exception as e:
         logger.error(f"Cost estimation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1631,6 +1652,9 @@ async def analyze_documents(request: AnalyzeRequest):
 
     except HTTPException:
         raise
+    except asyncio.TimeoutError:
+        logger.error("Analysis timed out waiting for Pinecone")
+        raise HTTPException(status_code=504, detail="Analysis timed out - please try again")
     except Exception as e:
         logger.error(f"Analyze documents failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
