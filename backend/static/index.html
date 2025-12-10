@@ -246,8 +246,9 @@
             height: 30px;
             background: #e0e0e0;
             border-radius: 15px;
-            overflow: hidden;
+            overflow: visible;
             margin-bottom: 10px;
+            position: relative;
         }
 
         .progress-fill {
@@ -255,11 +256,27 @@
             background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
             width: 0%;
             transition: width 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            border-radius: 15px;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .progress-bar::after {
+            content: attr(data-progress);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             color: white;
-            font-weight: 600;
+            font-weight: 700;
+            font-size: 0.85em;
+            z-index: 1;
+            white-space: nowrap;
+            text-shadow: 0 0 3px rgba(0, 0, 0, 0.8),
+                0 0 5px rgba(0, 0, 0, 0.6),
+                1px 1px 2px rgba(0, 0, 0, 0.9);
+            pointer-events: none;
         }
 
         .summary {
@@ -861,6 +878,7 @@
             font-weight: 500;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
 <body>
@@ -885,7 +903,8 @@
                 <div class="drop-zone" id="dropZone">
                     <div class="drop-zone-text">Drag & Drop Files Here</div>
                     <div class="drop-zone-subtext">or click to browse</div>
-                    <div class="drop-zone-subtext">Supports: PDF, DOCX, TXT, MD</div>
+                    <div class="drop-zone-subtext">Supports: PDF, DOCX, TXT,
+                        MD</div>
                 </div>
                 <input type="file" id="fileInput" class="file-input" multiple accept=".pdf,.docx,.txt,.md">
             </div>
@@ -893,7 +912,6 @@
             <div class="ai-tagging">
                 <input type="checkbox" id="aiTagging">
                 <label for="aiTagging">Enable AI Tagging</label>
-
                 <div style="margin-top: 15px;">
                     <label>AI Provider:</label>
                     <select id="aiProvider"
@@ -902,7 +920,6 @@
                         <option value="openai">OpenAI GPT-3.5 ($0.40 per 1000 docs)</option>
                     </select>
                 </div>
-
                 <div id="ollamaModelDiv" style="margin-top: 10px;">
                     <label>Ollama Model:</label>
                     <select id="ollamaModel"
@@ -916,7 +933,6 @@
             </div>
 
             <div class="file-list" id="fileList"></div>
-
             <button class="upload-btn" id="uploadBtn" disabled>Upload Files</button>
 
             <div class="progress-container" id="progressContainer">
@@ -929,38 +945,30 @@
             <!-- Spending Dashboard -->
             <div class="spending-dashboard" id="spendingDashboard">
                 <h3>💰 Claude Spending - <span id="currentMonth">November 2025</span></h3>
-
                 <div class="spending-summary">
                     <div class="stat-box">
                         <div class="stat-number" id="spentThisMonth">$0.00</div>
                         <div class="stat-label">Spent This Month</div>
                     </div>
-
                     <div class="stat-box">
                         <div class="stat-number" id="remainingBudget">$20.00</div>
                         <div class="stat-label">Remaining Budget</div>
                     </div>
-
                     <div class="stat-box">
                         <div class="stat-number" id="monthlyCap">$20.00</div>
                         <div class="stat-label">Monthly Cap</div>
                         <button class="small-btn" onclick="changeSpendingCap()">Change</button>
                     </div>
                 </div>
-
-                <div class="progress-bar">
-                    <div class="progress-fill" id="budgetProgress" style="width: 0%;">0% Used</div>
+                <div class="progress-bar" id="budgetProgressBar" data-progress="0% Used">
+                    <div class="progress-fill" id="budgetProgress" style="width: 0%;"></div>
                 </div>
-
                 <div class="spending-details">
                     <p id="docsAnalyzed">📊 <strong>0 documents</strong> analyzed (~0 pages)</p>
                     <p id="analysesCount">🔄 <strong>0 analyses</strong> performed this month</p>
                     <p id="tokensProcessed">📈 <strong>0 tokens</strong> processed</p>
                 </div>
-
-                <button class="secondary-btn" onclick="showSpendingHistory()">
-                    View Detailed History
-                </button>
+                <button class="secondary-btn" onclick="showSpendingHistory()">View Detailed History </button>
             </div>
         </div>
 
@@ -1012,7 +1020,6 @@
                         <div class="loading">Loading documents...</div>
                     </div>
                 </div>
-
                 <div class="analysis-status" id="analysisStatus">No analysis started yet.</div>
                 <div class="analysis-results" id="analysisResults" style="display:none;"></div>
             </div>
@@ -1023,19 +1030,14 @@
             <!-- Uploaded Documents List -->
             <div class="uploaded-docs-section" id="uploadedDocsSection">
                 <h3>📚 Uploaded Documents</h3>
-
                 <div class="docs-controls">
-                    <button class="secondary-btn" onclick="refreshDocumentList()">
-                        🔄 Refresh List
-                    </button>
+                    <button class="secondary-btn" onclick="refreshDocumentList()">🔄 Refresh List </button>
                     <input type="text" id="docSearch" placeholder="🔍 Search documents..." onkeyup="filterDocuments()"
                         style="padding: 10px; border-radius: 5px; border: 2px solid var(--royal-purple); width: 300px; font-size: 1em; color: var(--deep-purple);">
                 </div>
-
                 <div class="docs-stats">
                     <p>📊 <strong id="totalDocs">0</strong> documents in database</p>
                 </div>
-
                 <div class="docs-list" id="docsList">
                     <div class="loading">Loading documents...</div>
                 </div>
@@ -1048,14 +1050,12 @@
             <div class="research-section" id="researchSection">
                 <h3>🔮 Research Assistant</h3>
                 <p class="research-subtitle">Query the consciousness library for course research</p>
-
                 <div class="query-form">
                     <div class="form-group">
                         <label for="queryQuestion">Your Question</label>
                         <textarea id="queryQuestion" class="query-textarea"
                             placeholder="Examples:&#10;• What are the key principles of the 12 steps?&#10;• How do chakras relate to spiritual awakening?&#10;• What do mystical traditions say about consciousness?&#10;• Explain the connection between astrology and personal transformation"></textarea>
                     </div>
-
                     <div class="form-group">
                         <label for="focusArea">Focus Area (Optional)</label>
                         <select id="focusArea" class="query-select">
@@ -1066,10 +1066,7 @@
                             <option value="astrology">Astrology</option>
                         </select>
                     </div>
-
-                    <button class="ask-btn" id="askBtn" onclick="askQuestion()">
-                        Ask Question
-                    </button>
+                    <button class="ask-btn" id="askBtn" onclick="askQuestion()">Ask Question </button>
                 </div>
 
                 <!-- Loading Spinner -->
@@ -1082,11 +1079,8 @@
                 <div class="answer-container" id="answerContainer">
                     <div class="answer-header">Answer</div>
                     <div class="answer-text" id="answerText"></div>
-
                     <div class="sources-section">
-                        <div class="sources-header">
-                            📖 Sources
-                        </div>
+                        <div class="sources-header">📖 Sources </div>
                         <div id="sourcesContainer"></div>
                     </div>
                 </div>
@@ -1146,13 +1140,16 @@
 
         function renderFileList() {
             fileList.innerHTML = '';
+
             selectedFiles.forEach((file, index) => {
                 const fileItem = document.createElement('div');
                 fileItem.className = 'file-item';
-                fileItem.innerHTML = `
-                    <span class="file-name">${file.name}</span>
-                    <span class="file-status status-pending" id="status-${index}">Pending</span>
-                `;
+
+                fileItem.innerHTML = ` <span class="file-name" >$ {
+                        file.name
+                    }
+
+                    </span> <span class="file-status status-pending" id="status-${index}" >Pending</span> `;
                 fileList.appendChild(fileItem);
             });
         }
@@ -1169,7 +1166,12 @@
 
             for (let i = 0; i < selectedFiles.length; i++) {
                 const file = selectedFiles[i];
-                const statusEl = document.getElementById(`status-${i}`);
+
+                const statusEl = document.getElementById(`status-$ {
+                        i
+                    }
+
+                    `);
                 const title = file.name.replace(/\.[^/.]+$/, '');
 
                 // Check for duplicates before uploading
@@ -1198,7 +1200,9 @@
                     successful++;
                     statusEl.textContent = 'Success';
                     statusEl.className = 'file-status status-success';
-                } else {
+                }
+
+                else {
                     failed++;
                     statusEl.textContent = 'Failed';
                     statusEl.className = 'file-status status-error';
@@ -1209,24 +1213,23 @@
                 progressFill.textContent = progress + '%';
             }
 
-            summary.innerHTML = `
-                <div class="summary-item">
-                    <div class="summary-number">${selectedFiles.length}</div>
-                    <div>Total Files</div>
-                </div>
-                <div class="summary-item">
-                    <div class="summary-number" style="color: #00b894;">${successful}</div>
-                    <div>Successful</div>
-                </div>
-                <div class="summary-item">
-                    <div class="summary-number" style="color: #d63031;">${failed}</div>
-                    <div>Failed</div>
-                </div>
-                <div class="summary-item">
-                    <div class="summary-number" style="color: #f39c12;">${skipped}</div>
-                    <div>Skipped</div>
-                </div>
-            `;
+            summary.innerHTML = ` <div class="summary-item"><div class="summary-number">$ {
+                selectedFiles.length
+            }
+
+            </div><div>Total Files</div></div><div class="summary-item"><div class="summary-number" style="color: #00b894;">$ {
+                successful
+            }
+
+            </div><div>Successful</div></div><div class="summary-item"><div class="summary-number" style="color: #d63031;">$ {
+                failed
+            }
+
+            </div><div>Failed</div></div><div class="summary-item"><div class="summary-number" style="color: #f39c12;">$ {
+                skipped
+            }
+
+            </div><div>Skipped</div></div>`;
 
             // Refresh the document list to show newly uploaded files
             await loadDocumentList();
@@ -1237,6 +1240,7 @@
         async function uploadFile(file) {
             try {
                 const reader = new FileReader();
+
                 const text = await new Promise((resolve, reject) => {
                     reader.onload = () => resolve(reader.result);
                     reader.onerror = reject;
@@ -1245,19 +1249,30 @@
                 });
 
                 // Clean up text to remove problematic characters
-                const cleanedText = text
-                    .replace(/\uFFFD/g, '') // Remove replacement characters
+                const cleanedText = text.replace(/\uFFFD/g, '') // Remove replacement characters
                     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); // Remove control characters except \n, \r, \t
 
                 // Estimate size for user feedback
                 const sizeKB = Math.round(cleanedText.length / 1024);
-                console.log(`Processing ${file.name}: ${sizeKB} KB`);
+
+                console.log(`Processing $ {
+                        file.name
+                    }
+
+                    : $ {
+                        sizeKB
+                    }
+
+                    KB`);
 
                 const response = await fetch('/upload', {
+
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json; charset=utf-8',
-                    },
+                    }
+
+                    ,
                     body: JSON.stringify({
                         text: cleanedText,
                         title: file.name.replace(/\.[^/.]+$/, ''),
@@ -1269,19 +1284,42 @@
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-                    console.error(`Upload failed for ${file.name}:`, errorData);
+                    const errorData = await response.json().catch(() => ({
+                        detail: 'Unknown error'
+                    }));
+
+                    console.error(`Upload failed for $ {
+                file.name
+            }
+
+            :`, errorData);
                     throw new Error(errorData.detail || 'Upload failed');
                 }
 
                 const result = await response.json();
-                console.log(`Upload success for ${file.name}:`, result);
+
+                console.log(`Upload success for $ {
+                file.name
+            }
+
+            :`, result);
                 return true;
 
-            } catch (error) {
+            }
+
+            catch (error) {
                 console.error('Upload error:', error);
+
                 // Show error in browser console for debugging
-                alert(`Failed to upload ${file.name}: ${error.message}\n\nCheck browser console for details.`);
+                alert(`Failed to upload $ {
+                    file.name
+                }
+
+                : $ {
+                    error.message
+                }
+
+                \n\nCheck browser console for details.`);
                 return false;
             }
         }
@@ -1306,10 +1344,7 @@
                     <div class="doc-title">${escapeHtml(doc.title)}</div>
                     <div class="doc-chunks">${doc.chunk_count} chunks</div>
                     <div class="doc-actions">
-                        ${containerId === 'docsList' ?
-                    `<button onclick="deleteDocument('${escapeHtml(doc.title).replace(/'/g, "\\'")}')">🗑️ Delete</button>` :
-                    '' // No delete button in analysis view
-                }
+                        ${containerId === 'docsList' ? `<button onclick="deleteDocument('${escapeHtml(doc.title).replace(/'/g, "\\'")}')">\ud83d\uddd1\ufe0f Delete</button>` : ''}
                     </div>
                 </div>
             `).join('');
@@ -1319,7 +1354,9 @@
         async function loadDocumentList() {
             try {
                 // Show loading state in both
-                const targets = ['docsList', 'analysisDocsList'];
+                const targets = ['docsList',
+                    'analysisDocsList'];
+
                 targets.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.innerHTML = '<div class="loading">Loading documents...</div>';
@@ -1336,9 +1373,13 @@
                     renderDocListToContainer(id, data.documents);
                 });
 
-            } catch (error) {
+            }
+
+            catch (error) {
                 console.error('Failed to load documents:', error);
-                const targets = ['docsList', 'analysisDocsList'];
+                const targets = ['docsList',
+                    'analysisDocsList'];
+
                 targets.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.innerHTML = '<div class="loading">❌ Failed to load documents</div>';
@@ -1374,10 +1415,13 @@
 
             items.forEach(item => {
                 const title = item.dataset.title.toLowerCase();
+
                 if (title.includes(searchTerm)) {
                     item.style.display = 'grid';
                     visibleCount++;
-                } else {
+                }
+
+                else {
                     item.style.display = 'none';
                 }
             });
@@ -1389,7 +1433,7 @@
             if (visibleCount === 0 && items.length > 0) {
                 const noResults = document.createElement('div');
                 noResults.className = 'no-results-search'; // Different class to avoid conflict
-                noResults.textContent = `No documents match "${input.value}"`;
+                noResults.textContent = `No documents match "${input.value}" `;
                 noResults.style.padding = "20px";
                 noResults.style.textAlign = "center";
                 noResults.style.color = "#999";
@@ -1399,7 +1443,7 @@
 
         // Delete document
         async function deleteDocument(title) {
-            if (!confirm(`⚠️ Are you sure you want to delete "${title}"?\n\nThis will remove all chunks from the database.\n\nThis action cannot be undone.`)) {
+            if (!confirm(`⚠️ Are you sure you want to delete "${title}" ?\n\nThis will remove all chunks from the database.\n\nThis action cannot be undone.`)) {
                 return;
             }
 
@@ -1413,11 +1457,15 @@
                 if (data.status === 'success') {
                     alert(`✅ ${data.message}`);
                     await loadDocumentList(); // Refresh list
-                } else {
+                }
+
+                else {
                     alert('❌ Failed to delete document');
                 }
 
-            } catch (error) {
+            }
+
+            catch (error) {
                 alert('❌ Failed to delete document');
                 console.error('Delete error:', error);
             }
@@ -1427,28 +1475,33 @@
         async function checkDuplicateBeforeUpload(title) {
             try {
                 const response = await fetch('/check-duplicate', {
+
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: title })
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+
+                    ,
+                    body: JSON.stringify({
+                        title: title
+                    })
                 });
 
                 const data = await response.json();
 
                 if (data.exists) {
+
                     // Show warning with option to proceed or cancel
-                    const proceed = confirm(
-                        `⚠️ DUPLICATE DETECTED\n\n` +
-                        `"${title}" already exists in the database with ${data.chunk_count} chunks.\n\n` +
-                        `Click OK to upload anyway (will create duplicate)\n` +
-                        `Click Cancel to skip this file`
-                    );
+                    const proceed = confirm(`⚠️ DUPLICATE DETECTED\n\n` + `"${title}" already exists in the database with ${data.chunk_count} chunks.\n\n` + `Click OK to upload anyway (will create duplicate)\n` + `Click Cancel to skip this file`);
 
                     return proceed; // true = upload anyway, false = skip
                 }
 
                 return true; // Not a duplicate, proceed with upload
 
-            } catch (error) {
+            }
+
+            catch (error) {
                 console.error('Duplicate check failed:', error);
                 return true; // If check fails, allow upload
             }
@@ -1469,42 +1522,59 @@
             try {
                 const response = await fetch('/spending-dashboard');
                 const data = await response.json();
+
                 if (data.status === 'success') {
                     updateDashboardUI(data.stats);
                 }
-            } catch (error) {
+            }
+
+            catch (error) {
                 console.error('Failed to load spending dashboard:', error);
             }
         }
 
         function updateDashboardUI(stats) {
             document.getElementById('spentThisMonth').textContent = `$${stats.total_cost.toFixed(2)}`;
+
             document.getElementById('remainingBudget').textContent = `$${stats.remaining_budget.toFixed(2)}`;
+
             document.getElementById('monthlyCap').textContent = `$${stats.monthly_cap.toFixed(2)}`;
-            document.getElementById('docsAnalyzed').innerHTML =
-                `📊 <strong>${stats.analyses_count || 0} analyses</strong> (~${stats.estimated_pages_analyzed || 0} pages)`;
-            document.getElementById('analysesCount').innerHTML =
-                `🔄 <strong>${stats.analyses_count || 0} analyses</strong> performed this month`;
-            document.getElementById('tokensProcessed').innerHTML =
-                `📈 <strong>${stats.total_input_tokens || 0} tokens</strong> processed`;
+
+            document.getElementById('docsAnalyzed').innerHTML = `📊 <strong>${stats.analyses_count || 0} analyses</strong> (~${stats.estimated_pages_analyzed || 0} pages)`;
+
+            document.getElementById('analysesCount').innerHTML = `🔄 <strong>${stats.analyses_count || 0} analyses</strong> performed this month`;
+
+            document.getElementById('tokensProcessed').innerHTML = `📈 <strong>${stats.total_input_tokens || 0} tokens</strong> processed`;
 
             const progress = Math.min(100, Math.round(stats.budget_used_percentage || 0));
-            const bar = document.getElementById('budgetProgress');
-            bar.style.width = `${progress}%`;
-            bar.textContent = `${progress}% Used`;
+            const progressBar = document.getElementById('budgetProgressBar');
+            const progressFill = document.getElementById('budgetProgress');
+
+            progressFill.style.width = `${progress}%`;
+            progressBar.setAttribute('data-progress', `${progress}% Used`);
         }
 
         async function changeSpendingCap() {
             const newCap = prompt("Enter new monthly cap:", "40");
             if (!newCap) return;
+
             try {
                 await fetch('/update-spending-cap', {
+
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ new_cap: parseFloat(newCap) })
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+
+                    ,
+                    body: JSON.stringify({
+                        new_cap: parseFloat(newCap)
+                    })
                 });
                 await loadSpendingDashboard();
-            } catch (error) {
+            }
+
+            catch (error) {
                 console.error('Failed to update cap:', error);
             }
         }
@@ -1514,6 +1584,7 @@
                 const response = await fetch('/spending-dashboard');
                 const data = await response.json();
                 const history = data.history || [];
+
                 const rows = history.map(item => `
                     <div class="history-item">
                         <div>${escapeHtml(item.created_at || '')}</div>
@@ -1527,17 +1598,23 @@
                 const modalHTML = `
                     <h3>📊 Claude Spending History</h3>
                     <div class="budget-status">
-                        <strong>Cap:</strong> $${(data.stats?.monthly_cap || 0).toFixed(2)} |
-                        <strong>Spent:</strong> $${(data.stats?.total_cost || 0).toFixed(2)} |
+                        <strong>Cap:</strong> $${(data.stats?.monthly_cap || 0).toFixed(2)} | 
+                        <strong>Spent:</strong> $${(data.stats?.total_cost || 0).toFixed(2)} | 
                         <strong>Remaining:</strong> $${(data.stats?.remaining_budget || 0).toFixed(2)}
                     </div>
                     <div class="history-item" style="font-weight:700;">
-                        <div>Date</div><div>Type</div><div>Docs</div><div>Cost</div><div>Tokens</div>
+                        <div>Date</div>
+                        <div>Type</div>
+                        <div>Docs</div>
+                        <div>Cost</div>
+                        <div>Tokens</div>
                     </div>
                     ${rows}
                 `;
                 showModal(modalHTML);
-            } catch (error) {
+            }
+
+            catch (error) {
                 console.error('Failed to load history:', error);
             }
         }
@@ -1553,14 +1630,25 @@
 
         function updateCurrentMonth() {
             const now = new Date();
-            const monthNames = ["January", "February", "March", "April", "May", "June",
-                "July", "August", "September", "October", "November", "December"];
-            document.getElementById('currentMonth').textContent =
-                `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+            const monthNames = ["January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December"];
+
+            document.getElementById('currentMonth').textContent = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
         }
 
         // Tab switching function
         function switchTab(tabName, event) {
+
             // Hide all tabs
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
@@ -1577,7 +1665,10 @@
             // Add active class to clicked button
             if (event && event.target) {
                 event.target.classList.add('active');
-            } else {
+            }
+
+            else {
+
                 // Fallback: find button by tab name
                 document.querySelectorAll('.tab-btn').forEach(btn => {
                     if (btn.textContent.includes(tabName.charAt(0).toUpperCase() + tabName.slice(1))) {
@@ -1589,7 +1680,9 @@
             // Load data if needed
             if (tabName === 'documents' || tabName === 'analysis') {
                 loadDocumentList();
-            } else if (tabName === 'upload') {
+            }
+
+            else if (tabName === 'upload') {
                 loadSpendingDashboard();
             }
         }
@@ -1615,29 +1708,38 @@
         async function estimateAndRunAnalysis(type, limit = 50) {
             const analysisStatus = document.getElementById('analysisStatus');
             const selected = type === 'selected' ? getSelectedTitles() : [];
+
             if (type === 'selected' && selected.length === 0) {
                 alert('Select at least one document to analyze.');
                 return;
             }
 
             analysisStatus.textContent = 'Estimating cost...';
+
             try {
                 const payload = {
                     analysis_type: type,
                     limit: limit,
                     selected_titles: selected
-                };
+                }
+
+                    ;
 
                 const response = await fetch('/analyze-documents', {
+
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+
+                    ,
                     body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
 
                 if (data.status === 'budget_exceeded') {
-                    analysisStatus.textContent = `Budget exceeded. Estimated cost $${data.estimate?.total_cost?.toFixed(2) || 0}. Remaining ${data.budget?.remaining || 0}.`;
+                    analysisStatus.textContent = `Budget exceeded. Estimated cost $${data.estimate?.total_cost?.toFixed(2) || 0}. Remaining $${data.budget?.remaining || 0}.`;
                     return;
                 }
 
@@ -1649,7 +1751,9 @@
                 analysisStatus.textContent = `Analyzed ${data.documents_analyzed} documents. Rendering results...`;
                 displayAnalysisResults(data);
                 await loadSpendingDashboard();
-            } catch (error) {
+            }
+
+            catch (error) {
                 console.error('Analysis failed:', error);
                 analysisStatus.textContent = 'Analysis failed. Check console.';
             }
@@ -1657,19 +1761,24 @@
 
         function displayAnalysisResults(result) {
             const container = document.getElementById('analysisResults');
+
             if (!result || !result.batches) {
                 container.style.display = 'none';
                 return;
             }
 
             const rendered = result.batches.map((batch, idx) => {
-                const analysis = batch.analysis || {};
+                const analysis = batch.analysis || {}
+
+                    ;
+
                 const themes = (analysis.cross_document_themes || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
+
                 const patterns = (analysis.consciousness_patterns || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
+
                 const synth = (analysis.synthesis_opportunities || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
-                const connections = (analysis.suggested_connections || []).map(c =>
-                    `<li>${escapeHtml(c.doc_id || '')} → ${escapeHtml(c.relates_to || '')}: ${escapeHtml(c.connection || '')}</li>`
-                ).join('') || '<li>None</li>';
+
+                const connections = (analysis.suggested_connections || []).map(c => `<li>${escapeHtml(c.doc_id || '')} → ${escapeHtml(c.relates_to || '')}: ${escapeHtml(c.connection || '')}</li>`).join('') || '<li>None</li>';
 
                 return `
                     <div style="border-bottom:1px solid #eee; padding:10px 0;">
@@ -1715,35 +1824,31 @@
                 let resultsHTML = `
                     <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 15px;">
                         <h4 style="color: #667eea; margin-bottom: 15px;">Tagging Status Summary</h4>
-                        
                         <div style="margin-bottom: 20px;">
                             <h5>Pass 1: Keyword Tags</h5>
                             <p><strong>${summary.pass_1_keyword_tags.count}/${summary.total_documents}</strong> documents (${summary.pass_1_keyword_tags.percentage}%)</p>
                             <p style="color: #00b894;">${summary.pass_1_keyword_tags.status}</p>
                         </div>
-                        
                         <div style="margin-bottom: 20px;">
                             <h5>Pass 2: AI Enhancement (Ollama/OpenAI)</h5>
                             <p><strong>${summary.pass_2_ai_enhancement.count}/${summary.total_documents}</strong> documents (${summary.pass_2_ai_enhancement.percentage}%)</p>
                             <p style="color: ${summary.pass_2_ai_enhancement.count === summary.total_documents ? '#00b894' : '#f39c12'};">${summary.pass_2_ai_enhancement.status}</p>
                         </div>
-                        
                         <div style="margin-bottom: 20px;">
                             <h5>Pass 3: Claude Deep Analysis</h5>
                             <p>${summary.pass_3_claude_analysis.status}</p>
                             <p style="font-size: 0.9em; color: #666;">${summary.pass_3_claude_analysis.note}</p>
                         </div>
-                        
                         <h5 style="margin-top: 25px;">Sample Documents:</h5>
-                        <div style="max-height: 300px; overflow-y: auto;">
-                `;
+                        <div style="max-height: 300px; overflow-y: auto;">`;
 
                 sampleDocs.forEach(doc => {
                     const hasAI = doc.has_ai_enhancement ? '✅' : '❌';
+
                     resultsHTML += `
                         <div style="border-bottom: 1px solid #eee; padding: 10px 0;">
-                            <strong>${escapeHtml(doc.title)}</strong> (${doc.chunk_count} chunks)
-                            <br>Keyword Tags: ${doc.has_keyword_tags ? '✅' : '❌'} | AI Enhancement: ${hasAI}
+                            <strong>${escapeHtml(doc.title)}</strong> (${doc.chunk_count} chunks)<br>
+                            Keyword Tags: ${doc.has_keyword_tags ? '✅' : '❌'} | AI Enhancement: ${hasAI}
                             ${doc.sample_tags.length > 0 ? `<br>Sample tags: ${doc.sample_tags.slice(0, 5).map(t => escapeHtml(t)).join(', ')}` : ''}
                             ${doc.sample_primary_theme ? `<br>Primary Theme: ${escapeHtml(doc.sample_primary_theme.substring(0, 100))}...` : ''}
                         </div>
@@ -1754,7 +1859,9 @@
                 resultsEl.innerHTML = resultsHTML;
                 resultsEl.style.display = 'block';
 
-            } catch (error) {
+            }
+
+            catch (error) {
                 console.error('Verification failed:', error);
                 statusEl.textContent = 'Verification failed. Check console for details.';
             }
@@ -1770,10 +1877,15 @@
 
             try {
                 const response = await fetch('/retag-documents', {
+
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+
+                    ,
                     body: JSON.stringify({
-                        document_titles: null,  // null = all documents
+                        document_titles: null, // null = all documents
                         ai_provider: 'ollama',
                         ollama_model: 'llama3.1',
                         batch_size: 50
@@ -1783,13 +1895,29 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    statusEl.textContent = `✅ Successfully re-tagged ${data.documents_processed} documents (${data.chunks_updated} chunks updated).`;
+                    statusEl.textContent = `✅ Successfully re-tagged $ {
+                data.documents_processed
+            }
+
+            documents ($ {
+                    data.chunks_updated
+                }
+
+                chunks updated).`;
                     // Refresh verification
                     setTimeout(() => verifyTagging(), 2000);
-                } else {
-                    statusEl.textContent = `Re-tagging failed: ${data.message || 'Unknown error'}`;
                 }
-            } catch (error) {
+
+                else {
+                    statusEl.textContent = `Re-tagging failed: $ {
+                data.message || 'Unknown error'
+            }
+
+            `;
+                }
+            }
+
+            catch (error) {
                 console.error('Re-tagging failed:', error);
                 statusEl.textContent = 'Re-tagging failed. Check console for details.';
             }
@@ -1805,10 +1933,15 @@
 
             try {
                 const response = await fetch('/retag-documents', {
+
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+
+                    ,
                     body: JSON.stringify({
-                        document_titles: null,  // null = all documents
+                        document_titles: null, // null = all documents
                         ai_provider: 'openai',
                         batch_size: 50
                     })
@@ -1817,13 +1950,29 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    statusEl.textContent = `✅ Successfully re-tagged ${data.documents_processed} documents (${data.chunks_updated} chunks updated).`;
+                    statusEl.textContent = `✅ Successfully re-tagged $ {
+                data.documents_processed
+            }
+
+            documents ($ {
+                    data.chunks_updated
+                }
+
+                chunks updated).`;
                     // Refresh verification
                     setTimeout(() => verifyTagging(), 2000);
-                } else {
-                    statusEl.textContent = `Re-tagging failed: ${data.message || 'Unknown error'}`;
                 }
-            } catch (error) {
+
+                else {
+                    statusEl.textContent = `Re-tagging failed: $ {
+                data.message || 'Unknown error'
+            }
+
+            `;
+                }
+            }
+
+            catch (error) {
                 console.error('Re-tagging failed:', error);
                 statusEl.textContent = 'Re-tagging failed. Check console for details.';
             }
@@ -1860,33 +2009,48 @@
             errorMessage.innerHTML = '';
 
             try {
+
                 // Build request payload
                 const payload = {
                     question: question,
-                    top_k: 5  // Request top 5 relevant sources
-                };
+                    top_k: 5 // Request top 5 relevant sources
+                }
+
+                    ;
 
                 // Add focus area filter if selected
                 if (focusArea) {
                     payload.filters = {
                         focus_area: focusArea
-                    };
+                    }
+
+                        ;
                 }
 
                 console.log('Sending query:', payload);
 
                 // Call the /query endpoint
                 const response = await fetch('/query', {
+
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                    },
+                    }
+
+                    ,
                     body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ detail: 'Query failed' }));
-                    throw new Error(errorData.detail || `Server error: ${response.status}`);
+                    const errorData = await response.json().catch(() => ({
+                        detail: 'Query failed'
+                    }));
+
+                    throw new Error(errorData.detail || `Server error: $ {
+                    response.status
+                }
+
+                `);
                 }
 
                 const result = await response.json();
@@ -1895,10 +2059,19 @@
                 // Display the results
                 displayAnswer(result);
 
-            } catch (error) {
+            }
+
+            catch (error) {
                 console.error('Query error:', error);
-                showError(`Failed to process query: ${error.message}`);
-            } finally {
+
+                showError(`Failed to process query: $ {
+                    error.message
+                }
+
+                `);
+            }
+
+            finally {
                 askBtn.disabled = false;
                 loadingSpinner.style.display = 'none';
             }
@@ -1918,15 +2091,19 @@
                 return;
             }
 
-            // Display the answer text
-            answerText.textContent = result.answer;
+            // Store raw markdown for download
+            answerText.setAttribute('data-raw', result.answer);
+            // Display the answer text (Rendered Markdown)
+            answerText.innerHTML = marked.parse(result.answer);
 
             // Display sources if available
             if (result.sources && result.sources.length > 0) {
                 sourcesContainer.innerHTML = result.sources.map((source, index) => {
                     return createSourceCard(source, index + 1);
                 }).join('');
-            } else {
+            }
+
+            else {
                 sourcesContainer.innerHTML = '<div class="no-results">No sources found</div>';
             }
 
@@ -1935,8 +2112,35 @@
 
             // Scroll to answer
             setTimeout(() => {
-                answerContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }, 100);
+                answerContainer.scrollIntoView({
+                    behavior: 'smooth', block: 'nearest'
+                });
+            }
+
+                , 100);
+        }
+
+        function copyAnswer() {
+            const text = document.getElementById('answerText').innerText;
+            navigator.clipboard.writeText(text).then(() => alert('Copied to clipboard!'));
+        }
+
+        function downloadAnswer() {
+            const text = document.getElementById('answerText').innerText; // Or raw markdown if stored? 
+            // Better to download raw markdown. We should store it.
+            // But getting innerText is okay for now, or we grab the raw text before parsing?
+            // Actually, marked.parse consumes the string. 
+            // Let's store raw answer in a global or data attribute.
+            const raw = document.getElementById('answerText').getAttribute('data-raw');
+
+            const blob = new Blob([raw], {
+                type: 'text/markdown'
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'consciousness_answer.md';
+            a.click();
         }
 
         /**
@@ -1944,11 +2148,8 @@
          */
         function createSourceCard(source, index) {
             // Extract excerpt (first 200 characters of text)
-            const excerpt = source.text
-                ? (source.text.length > 200
-                    ? source.text.substring(0, 200) + '...'
-                    : source.text)
-                : 'No text available';
+            const excerpt = source.text ? (source.text.length > 200 ? source.text.substring(0, 200) + '...'
+                : source.text) : 'No text available';
 
             // Build metadata tags
             let metadataTags = '';
@@ -1981,9 +2182,12 @@
                 Object.keys(metadata).forEach(key => {
                     if (!['all_traditions', 'all_teachers', 'all_chakras'].includes(key)) {
                         const value = metadata[key];
+
                         if (value && typeof value === 'string') {
                             metadataTags += `<span class="metadata-tag">🏷️ ${escapeHtml(key)}: ${escapeHtml(value)}</span>`;
-                        } else if (Array.isArray(value) && value.length > 0) {
+                        }
+
+                        else if (Array.isArray(value) && value.length > 0) {
                             value.forEach(item => {
                                 metadataTags += `<span class="metadata-tag">🏷️ ${escapeHtml(key)}: ${escapeHtml(item)}</span>`;
                             });
@@ -1994,12 +2198,8 @@
 
             return `
                 <div class="source-card">
-                    <div class="source-title">
-                        ${index}. ${escapeHtml(source.title || 'Untitled Document')}
-                    </div>
-                    <div class="source-excerpt">
-                        "${escapeHtml(excerpt)}"
-                    </div>
+                    <div class="source-title">${index}. ${escapeHtml(source.title || 'Untitled Document')}</div>
+                    <div class="source-excerpt">"${escapeHtml(excerpt)}"</div>
                     ${metadataTags ? `<div class="source-metadata">${metadataTags}</div>` : ''}
                 </div>
             `;
@@ -2010,11 +2210,8 @@
          */
         function showError(message) {
             const errorMessage = document.getElementById('errorMessage');
-            errorMessage.innerHTML = `
-                <div class="error-message">
-                    ⚠️ ${escapeHtml(message)}
-                </div>
-            `;
+
+            errorMessage.innerHTML = `<div class="error-message">⚠️ ${escapeHtml(message)}</div>`;
         }
 
         // Allow Enter key to submit (Shift+Enter for new line)
