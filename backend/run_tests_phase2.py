@@ -99,8 +99,9 @@ async def test_ai_tagging():
         )
         
         print(f"✅ Tagging Function Returned Result")
-        print(f"Types: {tags.get('tags', {}).get('type', [])}")
-        print(f"Themes: {tags.get('tags', {}).get('theme', [])}")
+        print(f"Tags: {tags.get('tags', [])[:5]}")  # Show first 5 tags
+        print(f"Primary Theme: {tags.get('primary_theme', 'N/A')}")
+        print(f"Consciousness Level: {tags.get('consciousness_level', 'N/A')}")
         
     except Exception as e:
         print(f"❌ AI Tagging Test Failed: {e}")
