@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -31,7 +32,7 @@
         .container {
             background: white;
             border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
             max-width: 1400px;
             width: 100%;
             margin: 0 auto;
@@ -50,11 +51,11 @@
             color: var(--bright-purple);
             margin-bottom: 10px;
             font-size: 2.2em;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         }
 
         .subtitle {
-            color: rgba(255,255,255,0.9);
+            color: rgba(255, 255, 255, 0.9);
             margin-bottom: 0;
             font-size: 1.1em;
         }
@@ -72,7 +73,7 @@
             padding: 18px 24px;
             background: transparent;
             border: none;
-            color: rgba(255,255,255,0.7);
+            color: rgba(255, 255, 255, 0.7);
             font-size: 1em;
             font-weight: 600;
             cursor: pointer;
@@ -122,7 +123,8 @@
             background: linear-gradient(135deg, rgba(107, 44, 145, 0.05) 0%, rgba(74, 20, 140, 0.05) 100%);
         }
 
-        .drop-zone:hover, .drop-zone.dragover {
+        .drop-zone:hover,
+        .drop-zone.dragover {
             border-color: var(--fluorescent-purple);
             background: linear-gradient(135deg, rgba(217, 70, 239, 0.1) 0%, rgba(183, 148, 246, 0.1) 100%);
             transform: scale(1.02);
@@ -220,7 +222,7 @@
             cursor: pointer;
             transition: all 0.3s ease;
             margin-top: 20px;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         }
 
         .upload-btn:hover:not(:disabled) {
@@ -588,7 +590,7 @@
             font-weight: 700;
             cursor: pointer;
             transition: all 0.2s ease;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         }
 
         .analysis-btn:hover {
@@ -615,7 +617,7 @@
             background: white;
             border-radius: 10px;
             padding: 15px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
         }
 
         .research-section h3 {
@@ -701,7 +703,7 @@
             cursor: pointer;
             transition: all 0.3s ease;
             margin-top: 10px;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         }
 
         .ask-btn:hover:not(:disabled) {
@@ -733,8 +735,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .loading-text {
@@ -755,8 +762,15 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .answer-header {
@@ -848,6 +862,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="header">
@@ -867,83 +882,85 @@
         <!-- Upload Tab -->
         <div id="upload-tab" class="tab-content active">
             <div class="upload-section">
-            <div class="drop-zone" id="dropZone">
-                <div class="drop-zone-text">Drag & Drop Files Here</div>
-                <div class="drop-zone-subtext">or click to browse</div>
-                <div class="drop-zone-subtext">Supports: PDF, DOCX, TXT, MD</div>
-            </div>
-            <input type="file" id="fileInput" class="file-input" multiple accept=".pdf,.docx,.txt,.md">
-        </div>
-
-        <div class="ai-tagging">
-            <input type="checkbox" id="aiTagging">
-            <label for="aiTagging">Enable AI Tagging</label>
-
-            <div style="margin-top: 15px;">
-                <label>AI Provider:</label>
-                <select id="aiProvider" style="margin-left: 10px; padding: 8px; border-radius: 5px; border: 2px solid var(--royal-purple); color: var(--deep-purple); font-weight: 500;">
-                    <option value="ollama">Ollama (FREE - Local)</option>
-                    <option value="openai">OpenAI GPT-3.5 ($0.40 per 1000 docs)</option>
-                </select>
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-zone-text">Drag & Drop Files Here</div>
+                    <div class="drop-zone-subtext">or click to browse</div>
+                    <div class="drop-zone-subtext">Supports: PDF, DOCX, TXT, MD</div>
+                </div>
+                <input type="file" id="fileInput" class="file-input" multiple accept=".pdf,.docx,.txt,.md">
             </div>
 
-            <div id="ollamaModelDiv" style="margin-top: 10px;">
-                <label>Ollama Model:</label>
-                <select id="ollamaModel" style="margin-left: 10px; padding: 8px; border-radius: 5px; border: 2px solid var(--royal-purple); color: var(--deep-purple); font-weight: 500;">
-                    <option value="llama3.1">Llama 3.1</option>
-                    <option value="llama3">Llama 3</option>
-                    <option value="mistral">Mistral</option>
-                    <option value="gemma2">Gemma 2</option>
-                </select>
+            <div class="ai-tagging">
+                <input type="checkbox" id="aiTagging">
+                <label for="aiTagging">Enable AI Tagging</label>
+
+                <div style="margin-top: 15px;">
+                    <label>AI Provider:</label>
+                    <select id="aiProvider"
+                        style="margin-left: 10px; padding: 8px; border-radius: 5px; border: 2px solid var(--royal-purple); color: var(--deep-purple); font-weight: 500;">
+                        <option value="ollama">Ollama (FREE - Local)</option>
+                        <option value="openai">OpenAI GPT-3.5 ($0.40 per 1000 docs)</option>
+                    </select>
+                </div>
+
+                <div id="ollamaModelDiv" style="margin-top: 10px;">
+                    <label>Ollama Model:</label>
+                    <select id="ollamaModel"
+                        style="margin-left: 10px; padding: 8px; border-radius: 5px; border: 2px solid var(--royal-purple); color: var(--deep-purple); font-weight: 500;">
+                        <option value="llama3.1">Llama 3.1</option>
+                        <option value="llama3">Llama 3</option>
+                        <option value="mistral">Mistral</option>
+                        <option value="gemma2">Gemma 2</option>
+                    </select>
+                </div>
             </div>
-        </div>
 
-        <div class="file-list" id="fileList"></div>
+            <div class="file-list" id="fileList"></div>
 
-        <button class="upload-btn" id="uploadBtn" disabled>Upload Files</button>
+            <button class="upload-btn" id="uploadBtn" disabled>Upload Files</button>
 
-        <div class="progress-container" id="progressContainer">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill">0%</div>
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill">0%</div>
+                </div>
+                <div class="summary" id="summary"></div>
             </div>
-            <div class="summary" id="summary"></div>
-        </div>
 
             <!-- Spending Dashboard -->
             <div class="spending-dashboard" id="spendingDashboard">
-            <h3>💰 Claude Spending - <span id="currentMonth">November 2025</span></h3>
+                <h3>💰 Claude Spending - <span id="currentMonth">November 2025</span></h3>
 
-            <div class="spending-summary">
-                <div class="stat-box">
-                    <div class="stat-number" id="spentThisMonth">$0.00</div>
-                    <div class="stat-label">Spent This Month</div>
+                <div class="spending-summary">
+                    <div class="stat-box">
+                        <div class="stat-number" id="spentThisMonth">$0.00</div>
+                        <div class="stat-label">Spent This Month</div>
+                    </div>
+
+                    <div class="stat-box">
+                        <div class="stat-number" id="remainingBudget">$20.00</div>
+                        <div class="stat-label">Remaining Budget</div>
+                    </div>
+
+                    <div class="stat-box">
+                        <div class="stat-number" id="monthlyCap">$20.00</div>
+                        <div class="stat-label">Monthly Cap</div>
+                        <button class="small-btn" onclick="changeSpendingCap()">Change</button>
+                    </div>
                 </div>
 
-                <div class="stat-box">
-                    <div class="stat-number" id="remainingBudget">$20.00</div>
-                    <div class="stat-label">Remaining Budget</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="budgetProgress" style="width: 0%;">0% Used</div>
                 </div>
 
-                <div class="stat-box">
-                    <div class="stat-number" id="monthlyCap">$20.00</div>
-                    <div class="stat-label">Monthly Cap</div>
-                    <button class="small-btn" onclick="changeSpendingCap()">Change</button>
+                <div class="spending-details">
+                    <p id="docsAnalyzed">📊 <strong>0 documents</strong> analyzed (~0 pages)</p>
+                    <p id="analysesCount">🔄 <strong>0 analyses</strong> performed this month</p>
+                    <p id="tokensProcessed">📈 <strong>0 tokens</strong> processed</p>
                 </div>
-            </div>
 
-            <div class="progress-bar">
-                <div class="progress-fill" id="budgetProgress" style="width: 0%;">0% Used</div>
-            </div>
-
-            <div class="spending-details">
-                <p id="docsAnalyzed">📊 <strong>0 documents</strong> analyzed (~0 pages)</p>
-                <p id="analysesCount">🔄 <strong>0 analyses</strong> performed this month</p>
-                <p id="tokensProcessed">📈 <strong>0 tokens</strong> processed</p>
-            </div>
-
-            <button class="secondary-btn" onclick="showSpendingHistory()">
-                View Detailed History
-            </button>
+                <button class="secondary-btn" onclick="showSpendingHistory()">
+                    View Detailed History
+                </button>
             </div>
         </div>
 
@@ -951,15 +968,22 @@
         <div id="tagging-tab" class="tab-content">
             <!-- Tagging Management -->
             <div class="analysis-section" id="taggingSection">
-            <h3>🏷️ Tagging Management</h3>
-            <p class="research-subtitle">Verify and enhance document tags</p>
-            <div class="analysis-actions">
-                <button class="analysis-btn" onclick="verifyTagging()" style="background: var(--rich-green); border-color: var(--rich-green);">Verify Tagging Status</button>
-                <button class="analysis-btn" onclick="retagAllDocuments()" style="background: var(--royal-purple); border-color: var(--royal-purple);">Re-tag All with AI (Ollama)</button>
-                <button class="analysis-btn" onclick="retagAllDocumentsOpenAI()" style="background: var(--deep-purple); border-color: var(--deep-purple);">Re-tag All with OpenAI</button>
-            </div>
-            <div class="analysis-status" id="taggingStatus">Click "Verify Tagging Status" to check your documents.</div>
-            <div class="analysis-results" id="taggingResults" style="display:none;"></div>
+                <h3>🏷️ Tagging Management</h3>
+                <p class="research-subtitle">Verify and enhance document tags</p>
+                <div class="analysis-actions">
+                    <button class="analysis-btn" onclick="verifyTagging()"
+                        style="background: var(--rich-green); border-color: var(--rich-green);">Verify Tagging
+                        Status</button>
+                    <button class="analysis-btn" onclick="retagAllDocuments()"
+                        style="background: var(--royal-purple); border-color: var(--royal-purple);">Re-tag All with AI
+                        (Ollama)</button>
+                    <button class="analysis-btn" onclick="retagAllDocumentsOpenAI()"
+                        style="background: var(--deep-purple); border-color: var(--deep-purple);">Re-tag All with
+                        OpenAI</button>
+                </div>
+                <div class="analysis-status" id="taggingStatus">Click "Verify Tagging Status" to check your documents.
+                </div>
+                <div class="analysis-results" id="taggingResults" style="display:none;"></div>
             </div>
         </div>
 
@@ -967,15 +991,32 @@
         <div id="analysis-tab" class="tab-content">
             <!-- Claude Deep Analysis -->
             <div class="analysis-section" id="analysisSection">
-            <h3>🧠 Claude Deep Analysis (Pass 3)</h3>
-            <p class="research-subtitle">Run semantic analysis to find cross-document connections with Claude 4.5</p>
-            <div class="analysis-actions">
-                <button class="analysis-btn" onclick="estimateAndRunAnalysis('recent', 50)">Analyze Recent (50)</button>
-                <button class="analysis-btn" onclick="estimateAndRunAnalysis('full', 0)">Analyze All</button>
-                <button class="analysis-btn" onclick="estimateAndRunAnalysis('selected', 0)">Analyze Selected</button>
-            </div>
-            <div class="analysis-status" id="analysisStatus">No analysis started yet.</div>
-            <div class="analysis-results" id="analysisResults" style="display:none;"></div>
+                <h3>🧠 Claude Deep Analysis (Pass 3)</h3>
+                <p class="research-subtitle">Run semantic analysis to find cross-document connections with Claude 4.5
+                </p>
+                <div class="analysis-actions">
+                    <button class="analysis-btn" onclick="estimateAndRunAnalysis('recent', 50)">Analyze Recent
+                        (50)</button>
+                    <button class="analysis-btn" onclick="estimateAndRunAnalysis('full', 0)">Analyze All</button>
+                    <button class="analysis-btn" onclick="estimateAndRunAnalysis('selected', 0)">Analyze
+                        Selected</button>
+                    <button class="analysis-btn" onclick="estimateAndRunAnalysis('selected', 0)">Analyze
+                        Selected</button>
+                </div>
+
+                <!-- Document Selection Area -->
+                <div style="margin: 20px 0;">
+                    <h4 style="color: var(--royal-purple); margin-bottom: 10px;">Select Documents for Analysis</h4>
+                    <input type="text" id="analysisDocSearch" placeholder="🔍 Search to filter list..."
+                        onkeyup="filterAnalysisDocuments()"
+                        style="padding: 8px; width: 100%; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                    <div class="docs-list" id="analysisDocsList" style="max-height: 300px; border: 1px solid #ccc;">
+                        <div class="loading">Loading documents...</div>
+                    </div>
+                </div>
+
+                <div class="analysis-status" id="analysisStatus">No analysis started yet.</div>
+                <div class="analysis-results" id="analysisResults" style="display:none;"></div>
             </div>
         </div>
 
@@ -983,24 +1024,23 @@
         <div id="documents-tab" class="tab-content">
             <!-- Uploaded Documents List -->
             <div class="uploaded-docs-section" id="uploadedDocsSection">
-            <h3>📚 Uploaded Documents</h3>
+                <h3>📚 Uploaded Documents</h3>
 
-            <div class="docs-controls">
-                <button class="secondary-btn" onclick="refreshDocumentList()">
-                    🔄 Refresh List
-                </button>
-                <input type="text" id="docSearch" placeholder="🔍 Search documents..."
-                       onkeyup="filterDocuments()"
-                       style="padding: 10px; border-radius: 5px; border: 2px solid var(--royal-purple); width: 300px; font-size: 1em; color: var(--deep-purple);">
-            </div>
+                <div class="docs-controls">
+                    <button class="secondary-btn" onclick="refreshDocumentList()">
+                        🔄 Refresh List
+                    </button>
+                    <input type="text" id="docSearch" placeholder="🔍 Search documents..." onkeyup="filterDocuments()"
+                        style="padding: 10px; border-radius: 5px; border: 2px solid var(--royal-purple); width: 300px; font-size: 1em; color: var(--deep-purple);">
+                </div>
 
-            <div class="docs-stats">
-                <p>📊 <strong id="totalDocs">0</strong> documents in database</p>
-            </div>
+                <div class="docs-stats">
+                    <p>📊 <strong id="totalDocs">0</strong> documents in database</p>
+                </div>
 
-            <div class="docs-list" id="docsList">
-                <div class="loading">Loading documents...</div>
-            </div>
+                <div class="docs-list" id="docsList">
+                    <div class="loading">Loading documents...</div>
+                </div>
             </div>
         </div>
 
@@ -1008,56 +1048,53 @@
         <div id="query-tab" class="tab-content">
             <!-- Research Assistant Section -->
             <div class="research-section" id="researchSection">
-            <h3>🔮 Research Assistant</h3>
-            <p class="research-subtitle">Query the consciousness library for course research</p>
+                <h3>🔮 Research Assistant</h3>
+                <p class="research-subtitle">Query the consciousness library for course research</p>
 
-            <div class="query-form">
-                <div class="form-group">
-                    <label for="queryQuestion">Your Question</label>
-                    <textarea
-                        id="queryQuestion"
-                        class="query-textarea"
-                        placeholder="Examples:&#10;• What are the key principles of the 12 steps?&#10;• How do chakras relate to spiritual awakening?&#10;• What do mystical traditions say about consciousness?&#10;• Explain the connection between astrology and personal transformation"
-                    ></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="focusArea">Focus Area (Optional)</label>
-                    <select id="focusArea" class="query-select">
-                        <option value="">All Topics</option>
-                        <option value="12-step">12-Step Recovery</option>
-                        <option value="mystical">Mystical Traditions</option>
-                        <option value="chakras">Chakras & Energy</option>
-                        <option value="astrology">Astrology</option>
-                    </select>
-                </div>
-
-                <button class="ask-btn" id="askBtn" onclick="askQuestion()">
-                    Ask Question
-                </button>
-            </div>
-
-            <!-- Loading Spinner -->
-            <div class="loading-spinner" id="loadingSpinner">
-                <div class="spinner"></div>
-                <div class="loading-text">Searching the consciousness library...</div>
-            </div>
-
-            <!-- Answer Container -->
-            <div class="answer-container" id="answerContainer">
-                <div class="answer-header">Answer</div>
-                <div class="answer-text" id="answerText"></div>
-
-                <div class="sources-section">
-                    <div class="sources-header">
-                        📖 Sources
+                <div class="query-form">
+                    <div class="form-group">
+                        <label for="queryQuestion">Your Question</label>
+                        <textarea id="queryQuestion" class="query-textarea"
+                            placeholder="Examples:&#10;• What are the key principles of the 12 steps?&#10;• How do chakras relate to spiritual awakening?&#10;• What do mystical traditions say about consciousness?&#10;• Explain the connection between astrology and personal transformation"></textarea>
                     </div>
-                    <div id="sourcesContainer"></div>
-                </div>
-            </div>
 
-            <!-- Error Message -->
-            <div id="errorMessage"></div>
+                    <div class="form-group">
+                        <label for="focusArea">Focus Area (Optional)</label>
+                        <select id="focusArea" class="query-select">
+                            <option value="">All Topics</option>
+                            <option value="12-step">12-Step Recovery</option>
+                            <option value="mystical">Mystical Traditions</option>
+                            <option value="chakras">Chakras & Energy</option>
+                            <option value="astrology">Astrology</option>
+                        </select>
+                    </div>
+
+                    <button class="ask-btn" id="askBtn" onclick="askQuestion()">
+                        Ask Question
+                    </button>
+                </div>
+
+                <!-- Loading Spinner -->
+                <div class="loading-spinner" id="loadingSpinner">
+                    <div class="spinner"></div>
+                    <div class="loading-text">Searching the consciousness library...</div>
+                </div>
+
+                <!-- Answer Container -->
+                <div class="answer-container" id="answerContainer">
+                    <div class="answer-header">Answer</div>
+                    <div class="answer-text" id="answerText"></div>
+
+                    <div class="sources-section">
+                        <div class="sources-header">
+                            📖 Sources
+                        </div>
+                        <div id="sourcesContainer"></div>
+                    </div>
+                </div>
+
+                <!-- Error Message -->
+                <div id="errorMessage"></div>
             </div>
         </div>
     </div>
@@ -1234,7 +1271,7 @@
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({detail: 'Unknown error'}));
+                    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
                     console.error(`Upload failed for ${file.name}:`, errorData);
                     throw new Error(errorData.detail || 'Upload failed');
                 }
@@ -1255,37 +1292,59 @@
         // DOCUMENT LIST MANAGEMENT
         // ========================================
 
+        // Render list to a specific container
+        function renderDocListToContainer(containerId, documents) {
+            const container = document.getElementById(containerId);
+            if (!container) return; // specific container might not exist
+
+            if (documents.length === 0) {
+                container.innerHTML = '<div class="no-results">📭 No documents uploaded yet</div>';
+                return;
+            }
+
+            container.innerHTML = documents.map(doc => `
+                <div class="doc-item" data-title="${escapeHtml(doc.title)}">
+                    <div><input type="checkbox" class="doc-select" value="${escapeHtml(doc.title)}"></div>
+                    <div class="doc-title">${escapeHtml(doc.title)}</div>
+                    <div class="doc-chunks">${doc.chunk_count} chunks</div>
+                    <div class="doc-actions">
+                        ${containerId === 'docsList' ?
+                    `<button onclick="deleteDocument('${escapeHtml(doc.title).replace(/'/g, "\\'")}')">🗑️ Delete</button>` :
+                    '' // No delete button in analysis view
+                }
+                    </div>
+                </div>
+            `).join('');
+        }
+
         // Load document list on page load
         async function loadDocumentList() {
             try {
-                const docsList = document.getElementById('docsList');
-                docsList.innerHTML = '<div class="loading">Loading documents...</div>';
+                // Show loading state in both
+                const targets = ['docsList', 'analysisDocsList'];
+                targets.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerHTML = '<div class="loading">Loading documents...</div>';
+                });
 
                 const response = await fetch('/uploaded-documents');
                 const data = await response.json();
 
-                document.getElementById('totalDocs').textContent = data.total_documents;
+                const totalDocsEl = document.getElementById('totalDocs');
+                if (totalDocsEl) totalDocsEl.textContent = data.total_documents;
 
-                if (data.documents.length === 0) {
-                    docsList.innerHTML = '<div class="no-results">📭 No documents uploaded yet</div>';
-                    return;
-                }
-
-                docsList.innerHTML = data.documents.map(doc => `
-                    <div class="doc-item" data-title="${escapeHtml(doc.title)}">
-                        <div><input type="checkbox" class="doc-select" value="${escapeHtml(doc.title)}"></div>
-                        <div class="doc-title">${escapeHtml(doc.title)}</div>
-                        <div class="doc-chunks">${doc.chunk_count} chunks</div>
-                        <div class="doc-actions">
-                            <button onclick="deleteDocument('${escapeHtml(doc.title).replace(/'/g, "\\'")}')">🗑️ Delete</button>
-                        </div>
-                    </div>
-                `).join('');
+                // Render to both lists
+                targets.forEach(id => {
+                    renderDocListToContainer(id, data.documents);
+                });
 
             } catch (error) {
                 console.error('Failed to load documents:', error);
-                document.getElementById('docsList').innerHTML =
-                    '<div class="loading">❌ Failed to load documents</div>';
+                const targets = ['docsList', 'analysisDocsList'];
+                targets.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerHTML = '<div class="loading">❌ Failed to load documents</div>';
+                });
             }
         }
 
@@ -1295,9 +1354,24 @@
         }
 
         // Search/filter documents
+        // Filter function for standard doc list
         function filterDocuments() {
-            const searchTerm = document.getElementById('docSearch').value.toLowerCase();
-            const items = document.querySelectorAll('.doc-item');
+            filterList('docSearch', 'docsList');
+        }
+
+        // Filter function for analysis doc list
+        function filterAnalysisDocuments() {
+            filterList('analysisDocSearch', 'analysisDocsList');
+        }
+
+        // Generic filter helper
+        function filterList(inputId, listId) {
+            const input = document.getElementById(inputId);
+            const list = document.getElementById(listId);
+            if (!input || !list) return;
+
+            const searchTerm = input.value.toLowerCase();
+            const items = list.querySelectorAll('.doc-item');
             let visibleCount = 0;
 
             items.forEach(item => {
@@ -1310,16 +1384,18 @@
                 }
             });
 
-            // Show "no results" message if search yields nothing
-            const docsList = document.getElementById('docsList');
-            const existingNoResults = docsList.querySelector('.no-results');
+            // Handle no results message
+            const existingNoResults = list.querySelector('.no-results-search');
             if (existingNoResults) existingNoResults.remove();
 
             if (visibleCount === 0 && items.length > 0) {
                 const noResults = document.createElement('div');
-                noResults.className = 'no-results';
-                noResults.textContent = `No documents match "${document.getElementById('docSearch').value}"`;
-                docsList.appendChild(noResults);
+                noResults.className = 'no-results-search'; // Different class to avoid conflict
+                noResults.textContent = `No documents match "${input.value}"`;
+                noResults.style.padding = "20px";
+                noResults.style.textAlign = "center";
+                noResults.style.color = "#999";
+                list.appendChild(noResults);
             }
         }
 
@@ -1354,8 +1430,8 @@
             try {
                 const response = await fetch('/check-duplicate', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({title: title})
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: title })
                 });
 
                 const data = await response.json();
@@ -1426,8 +1502,8 @@
             try {
                 await fetch('/update-spending-cap', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({new_cap: parseFloat(newCap)})
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_cap: parseFloat(newCap) })
                 });
                 await loadSpendingDashboard();
             } catch (error) {
@@ -1491,15 +1567,15 @@
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
             });
-            
+
             // Remove active class from all buttons
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            
+
             // Show selected tab
             document.getElementById(tabName + '-tab').classList.add('active');
-            
+
             // Add active class to clicked button
             if (event && event.target) {
                 event.target.classList.add('active');
@@ -1511,9 +1587,9 @@
                     }
                 });
             }
-            
+
             // Load data if needed
-            if (tabName === 'documents') {
+            if (tabName === 'documents' || tabName === 'analysis') {
                 loadDocumentList();
             } else if (tabName === 'upload') {
                 loadSpendingDashboard();
@@ -1553,7 +1629,7 @@
 
                 const response = await fetch('/analyze-documents', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
@@ -1616,24 +1692,24 @@
         async function verifyTagging() {
             const statusEl = document.getElementById('taggingStatus');
             const resultsEl = document.getElementById('taggingResults');
-            
+
             statusEl.textContent = 'Checking tagging status...';
             resultsEl.style.display = 'none';
-            
+
             try {
                 const response = await fetch('/verify-tagging');
                 const data = await response.json();
-                
+
                 if (data.status !== 'success') {
                     statusEl.textContent = 'Verification failed.';
                     return;
                 }
-                
+
                 const summary = data.summary;
                 const sampleDocs = data.sample_documents || [];
-                
+
                 statusEl.textContent = `Found ${summary.total_documents} documents with ${summary.total_chunks} total chunks.`;
-                
+
                 // Display results
                 let resultsHTML = `
                     <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 15px;">
@@ -1660,7 +1736,7 @@
                         <h5 style="margin-top: 25px;">Sample Documents:</h5>
                         <div style="max-height: 300px; overflow-y: auto;">
                 `;
-                
+
                 sampleDocs.forEach(doc => {
                     const hasAI = doc.has_ai_enhancement ? '✅' : '❌';
                     resultsHTML += `
@@ -1672,11 +1748,11 @@
                         </div>
                     `;
                 });
-                
+
                 resultsHTML += '</div></div>';
                 resultsEl.innerHTML = resultsHTML;
                 resultsEl.style.display = 'block';
-                
+
             } catch (error) {
                 console.error('Verification failed:', error);
                 statusEl.textContent = 'Verification failed. Check console for details.';
@@ -1687,14 +1763,14 @@
             if (!confirm('This will re-tag ALL documents with Ollama AI enhancement (FREE). This may take a while. Continue?')) {
                 return;
             }
-            
+
             const statusEl = document.getElementById('taggingStatus');
             statusEl.textContent = 'Re-tagging all documents with Ollama... This may take several minutes.';
-            
+
             try {
                 const response = await fetch('/retag-documents', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         document_titles: null,  // null = all documents
                         ai_provider: 'ollama',
@@ -1702,9 +1778,9 @@
                         batch_size: 50
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.status === 'success') {
                     statusEl.textContent = `✅ Successfully re-tagged ${data.documents_processed} documents (${data.chunks_updated} chunks updated).`;
                     // Refresh verification
@@ -1722,23 +1798,23 @@
             if (!confirm('This will re-tag ALL documents with OpenAI (costs ~$0.40 per 1000 documents). Continue?')) {
                 return;
             }
-            
+
             const statusEl = document.getElementById('taggingStatus');
             statusEl.textContent = 'Re-tagging all documents with OpenAI... This may take several minutes.';
-            
+
             try {
                 const response = await fetch('/retag-documents', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         document_titles: null,  // null = all documents
                         ai_provider: 'openai',
                         batch_size: 50
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.status === 'success') {
                     statusEl.textContent = `✅ Successfully re-tagged ${data.documents_processed} documents (${data.chunks_updated} chunks updated).`;
                     // Refresh verification
@@ -1808,7 +1884,7 @@
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({detail: 'Query failed'}));
+                    const errorData = await response.json().catch(() => ({ detail: 'Query failed' }));
                     throw new Error(errorData.detail || `Server error: ${response.status}`);
                 }
 
@@ -1941,7 +2017,7 @@
         }
 
         // Allow Enter key to submit (Shift+Enter for new line)
-        document.getElementById('queryQuestion').addEventListener('keydown', function(e) {
+        document.getElementById('queryQuestion').addEventListener('keydown', function (e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 askQuestion();
@@ -1949,4 +2025,5 @@
         });
     </script>
 </body>
+
 </html>
