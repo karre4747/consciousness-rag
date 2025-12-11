@@ -1427,33 +1427,32 @@
         async function checkDuplicateBeforeUpload(title) {
             try {
                 const response = await fetch('/check-duplicate', {
-
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-
-                    ,
-                    body: JSON.stringify({
-                        title: title
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: title })
                 });
 
                 const data = await response.json();
 
                 if (data.exists) {
+                    let msg = `⚠️ DUPLICATE DETECTED\n\n"${title}" already exists in the database.`;
+
+                    if (data.providers && data.providers.length > 0) {
+                        msg += `\n\nTagged by: ${data.providers.join(', ').toUpperCase()}`;
+                    } else {
+                        msg += `\n\n(No specific AI provider detected in metadata)`;
+                    }
+
+                    msg += `\n\nClick OK using "Overwrite" logic (will re-process this file).\nClick Cancel to skip this file.`;
 
                     // Show warning with option to proceed or cancel
-                    const proceed = confirm(`⚠️ DUPLICATE DETECTED\n\n` + `"${title}" already exists in the database with ${data.chunk_count} chunks.\n\n` + `Click OK to upload anyway (will create duplicate)\n` + `Click Cancel to skip this file`);
-
+                    const proceed = confirm(msg);
                     return proceed; // true = upload anyway, false = skip
                 }
 
                 return true; // Not a duplicate, proceed with upload
 
-            }
-
-            catch (error) {
+            } catch (error) {
                 console.error('Duplicate check failed:', error);
                 return true; // If check fails, allow upload
             }
@@ -1755,11 +1754,11 @@
             const statusEl = document.getElementById('taggingStatus');
             const resultsEl = document.getElementById('taggingResults');
 
-            statusEl.textContent = 'Checking tagging status...';
+            statusEl.textContent = 'Fetching document status...';
             resultsEl.style.display = 'none';
 
             try {
-                const response = await fetch('/verify-tagging');
+                const response = await fetch('/verify-tagging?limit=500'); // Fetch up to 500 for now
                 const data = await response.json();
 
                 if (data.status !== 'success') {
@@ -1767,53 +1766,65 @@
                     return;
                 }
 
-                const summary = data.summary;
-                const sampleDocs = data.sample_documents || [];
+                statusEl.textContent = `Found ${data.total_documents} documents.`;
 
-                statusEl.textContent = `Found ${summary.total_documents} documents with ${summary.total_chunks} total chunks.`;
+                // Build Table
+                let tableHTML = `
+                    <div style="overflow-x: auto; margin-top: 15px;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                            <thead>
+                                <tr style="background: #f8f9fa; text-align: left;">
+                                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">Document Title</th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">Chunks</th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">Pass 1 (Keywords)</th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">Pass 2 (AI Status)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
 
-                // Display results
-                let resultsHTML = `
-                    <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 15px;">
-                        <h4 style="color: #667eea; margin-bottom: 15px;">Tagging Status Summary</h4>
-                        <div style="margin-bottom: 20px;">
-                            <h5>Pass 1: Keyword Tags</h5>
-                            <p><strong>${summary.pass_1_keyword_tags.count}/${summary.total_documents}</strong> documents (${summary.pass_1_keyword_tags.percentage}%)</p>
-                            <p style="color: #00b894;">${summary.pass_1_keyword_tags.status}</p>
-                        </div>
-                        <div style="margin-bottom: 20px;">
-                            <h5>Pass 2: AI Enhancement (Ollama/OpenAI)</h5>
-                            <p><strong>${summary.pass_2_ai_enhancement.count}/${summary.total_documents}</strong> documents (${summary.pass_2_ai_enhancement.percentage}%)</p>
-                            <p style="color: ${summary.pass_2_ai_enhancement.count === summary.total_documents ? '#00b894' : '#f39c12'};">${summary.pass_2_ai_enhancement.status}</p>
-                        </div>
-                        <div style="margin-bottom: 20px;">
-                            <h5>Pass 3: Claude Deep Analysis</h5>
-                            <p>${summary.pass_3_claude_analysis.status}</p>
-                            <p style="font-size: 0.9em; color: #666;">${summary.pass_3_claude_analysis.note}</p>
-                        </div>
-                        <h5 style="margin-top: 25px;">Sample Documents:</h5>
-                        <div style="max-height: 300px; overflow-y: auto;">`;
+                data.documents.forEach(doc => {
+                    // Status Badge Colors
+                    const p1Color = doc.pass_1_status === 'Complete' ? '#00b894' : '#fab1a0';
+                    const p1Badge = `<span style="padding: 3px 8px; border-radius: 4px; background: ${p1Color}; color: white; font-size: 0.8em;">${doc.pass_1_status}</span>`;
 
-                sampleDocs.forEach(doc => {
-                    const hasAI = doc.has_ai_enhancement ? '✅' : '❌';
+                    let p2Color = '#dfe6e9'; // Default grey
+                    let p2Text = doc.pass_2_status;
+                    let p2TextColor = '#636e72';
 
-                    resultsHTML += `
-                        <div style="border-bottom: 1px solid #eee; padding: 10px 0;">
-                            <strong>${escapeHtml(doc.title)}</strong> (${doc.chunk_count} chunks)<br>
-                            Keyword Tags: ${doc.has_keyword_tags ? '✅' : '❌'} | AI Enhancement: ${hasAI}
-                            ${doc.sample_tags.length > 0 ? `<br>Sample tags: ${doc.sample_tags.slice(0, 5).map(t => escapeHtml(t)).join(', ')}` : ''}
-                            ${doc.sample_primary_theme ? `<br>Primary Theme: ${escapeHtml(doc.sample_primary_theme.substring(0, 100))}...` : ''}
-                        </div>
+                    if (p2Text.includes('Openai') || p2Text.includes('Ollama')) {
+                        p2Color = '#0984e3'; // Blue for AI
+                        p2TextColor = 'white';
+                    } else if (p2Text.includes('Partial')) {
+                        p2Color = '#f39c12'; // Orange
+                        p2TextColor = 'white';
+                    }
+
+                    const p2Badge = `<span style="padding: 3px 8px; border-radius: 4px; background: ${p2Color}; color: ${p2TextColor}; font-size: 0.8em;">${p2Text}</span>`;
+
+                    tableHTML += `
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 10px;"><strong>${escapeHtml(doc.title)}</strong></td>
+                            <td style="padding: 10px;">${doc.chunk_count}</td>
+                            <td style="padding: 10px;">${p1Badge}</td>
+                            <td style="padding: 10px;">${p2Badge}</td>
+                        </tr>
                     `;
                 });
 
-                resultsHTML += '</div></div>';
-                resultsEl.innerHTML = resultsHTML;
+                tableHTML += `</tbody></table></div>`;
+
+                // Add legend/info
+                tableHTML += `
+                    <div style="margin-top: 15px; font-size: 0.85em; color: #666; text-align: right;">
+                        Showing top ${data.documents.length} of ${data.total_documents} documents
+                    </div>
+                `;
+
+                resultsEl.innerHTML = tableHTML;
                 resultsEl.style.display = 'block';
 
-            }
-
-            catch (error) {
+            } catch (error) {
                 console.error('Verification failed:', error);
                 statusEl.textContent = 'Verification failed. Check console for details.';
             }

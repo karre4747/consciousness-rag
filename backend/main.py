@@ -190,6 +190,11 @@ class AnalyzeRequest(BaseModel):
     selected_titles: Optional[List[str]] = None
 
 
+class DuplicateCheckRequest(BaseModel):
+    """Request model for checking duplicate documents"""
+    title: str
+
+
 # === HELPER FUNCTIONS ===
 
 async def pinecone_with_retry(func, max_retries=3, base_delay=1, max_delay=60, timeout=30.0):
@@ -574,6 +579,8 @@ async def upload_document(request: UploadRequest):
                         "bridge_concept": tags.get("bridge_concept", ""),
                         "recovery_focus": tags.get("recovery_focus", ""),
                         "healing_modality": tags.get("healing_modality", ""),
+                        "ai_provider": tags.get("ai_provider", ""),
+                        "ai_model": tags.get("ai_model", ""),
 
                         # ALL detected categories as lists (for comprehensive queries & membership filtering)
                         "all_chakras": detected_cats.get("chakras", []),
@@ -927,7 +934,7 @@ async def get_uploaded_documents():
 
 
 @app.post("/check-duplicate")
-async def check_duplicate(request: Dict[str, str]):
+async def check_duplicate(request: DuplicateCheckRequest):
     """
     Check if a document with this title already exists
 
@@ -1223,6 +1230,8 @@ async def retag_documents(request: RetagRequest):
                         "bridge_concept": tags.get("bridge_concept", existing_metadata.get("bridge_concept", "")),
                         "recovery_focus": tags.get("recovery_focus", existing_metadata.get("recovery_focus", "")),
                         "healing_modality": tags.get("healing_modality", existing_metadata.get("healing_modality", "")),
+                        "ai_provider": tags.get("ai_provider", existing_metadata.get("ai_provider", request.ai_provider)), # Update provider
+                        "ai_model": tags.get("ai_model", existing_metadata.get("ai_model", request.ollama_model)),
                         
                         # Update comprehensive fields
                         "all_chakras": detected_cats.get("chakras", existing_metadata.get("all_chakras", [])),

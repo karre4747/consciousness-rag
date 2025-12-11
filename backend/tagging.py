@@ -567,7 +567,9 @@ async def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "oll
                 "ascension_path": keyword_tags.get("ascension_path", ""),
                 "bridge_concept": keyword_tags.get("bridge_concept", ""),
                 "recovery_focus": keyword_tags.get("recovery_focus", ""),
-                "healing_modality": keyword_tags.get("healing_modality", "")
+                "healing_modality": keyword_tags.get("healing_modality", ""),
+                "ai_provider": ai_provider,
+                "ai_model": ollama_model if ai_provider == "ollama" else "gpt-3.5-turbo"
             }
 
             # Only add program_level if detected from filename
