@@ -983,59 +983,73 @@ async def verify_tagging(limit: int = 500):
     """
     Verify which tagging passes have been applied to documents.
     Returns detailed list for frontend table.
+    Uses list+fetch to ensure ALL documents are scanned.
     """
     try:
-        # Query Pinecone to get all documents (limited by param)
-        query_vector = [0.0] * PINECONE_DIMENSION
-        results = await pinecone_with_retry(
-            lambda: index.query(
-                vector=query_vector,
-                top_k=10000,  # Query broad to aggregate, then slice
-                include_metadata=True
-            ),
+        # 1. Get total stats
+        stats = await pinecone_with_retry(
+            index.describe_index_stats,
             max_retries=2,
-            timeout=30.0
+            timeout=10.0
         )
+        total_vectors = stats.total_vector_count
         
-        if not results.matches:
+        if total_vectors == 0:
             return {
                 "status": "success",
                 "message": "No documents found in database",
                 "total_documents": 0,
                 "documents": []
             }
-        
-        # Group by title
+
+        # 2. List ALL vector IDs (pagination handled by generator)
+        # This is strictly better than query(top_k=10000)
+        all_vector_ids = []
+        try:
+            for ids in index.list(limit=10000):
+                all_vector_ids.extend(ids)
+            logger.info(f"Verify Tagging: Retrieved {len(all_vector_ids)} vector IDs")
+        except Exception as list_err:
+             logger.warning(f"Verify Tagging: index.list() failed ({list_err}), falling back to query")
+             # Fallback to query if list fails
+             query_vector = [0.0] * PINECONE_DIMENSION
+             results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=query_vector,
+                    top_k=10000,
+                    include_metadata=True
+                ),
+                max_retries=2,
+                timeout=30.0
+             )
+             # ... handle fallback similarly ... 
+             # For brevity in this replacement, we'll assume list works or return error if completely broken
+             # But let's support a simple query fallback for safety
+             all_matches = results.matches
+             # (See below for unified processing)
+
+        # 3. Process vectors (Fetch metadata if we used list(), or use matches if we used query())
         documents_dict = {}
         
-        for match in results.matches:
-            title = match.metadata.get('title', 'Unknown')
-            
-            if title not in documents_dict:
-                documents_dict[title] = {
-                    'title': title,
-                    'chunk_count': 0,
-                    'has_keyword_tags': False,
-                    'ai_providers': set(),
-                    'last_analyzed': None # Placeholder for pass 3
-                }
-            
-            doc = documents_dict[title]
-            doc['chunk_count'] += 1
-            
-            # Check Pass 1: Keywords
-            tags = match.metadata.get('tags', [])
-            if tags and len(tags) > 0:
-                doc['has_keyword_tags'] = True
-            
-            # Check Pass 2: AI Provider & Model
-            provider = match.metadata.get('ai_provider')
-            if provider:
-                doc['ai_providers'].add(str(provider).upper())
+        if all_vector_ids:
+            # We have IDs from list(), need to fetch metadata in batches
+            FETCH_BATCH_SIZE = 1000
+            for i in range(0, len(all_vector_ids), FETCH_BATCH_SIZE):
+                batch_ids = all_vector_ids[i:i + FETCH_BATCH_SIZE]
                 
-            # Check for legacy primary_theme as fallback for AI presence
-            if not provider and match.metadata.get('primary_theme'):
-                doc['ai_providers'].add("PARTIAL_AI")
+                fetched = await pinecone_with_retry(
+                    lambda: index.fetch(ids=batch_ids),
+                    max_retries=2,
+                    timeout=30.0  # Increased timeout for fetch
+                )
+                
+                for vec_id, vector_data in fetched.vectors.items():
+                    process_vector_metadata(vector_data.metadata, documents_dict)
+                    
+        elif 'all_matches' in locals() and all_matches:
+             # Fallback path
+             for match in all_matches:
+                 process_vector_metadata(match.metadata, documents_dict)
 
         # Format for frontend
         formatted_docs = []
@@ -1079,6 +1093,35 @@ async def verify_tagging(limit: int = 500):
     except Exception as e:
         logger.error(f"Tagging verification failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+def process_vector_metadata(metadata, documents_dict):
+    """Helper to process metadata for tagging verification"""
+    title = metadata.get('title', 'Unknown')
+    
+    if title not in documents_dict:
+        documents_dict[title] = {
+            'title': title,
+            'chunk_count': 0,
+            'has_keyword_tags': False,
+            'ai_providers': set(),
+        }
+    
+    doc = documents_dict[title]
+    doc['chunk_count'] += 1
+    
+    # Check Pass 1: Keywords
+    tags = metadata.get('tags', [])
+    if tags and len(tags) > 0:
+        doc['has_keyword_tags'] = True
+    
+    # Check Pass 2: AI Provider
+    provider = metadata.get('ai_provider')
+    if provider:
+        doc['ai_providers'].add(str(provider).upper())
+        
+    # Check for legacy primary_theme as fallback
+    if not provider and metadata.get('primary_theme'):
+        doc['ai_providers'].add("PARTIAL_AI")
 
 
 @app.post("/retag-documents")
