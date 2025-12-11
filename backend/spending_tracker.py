@@ -8,7 +8,18 @@ from datetime import datetime, date
 from typing import Dict, List, Optional, Any
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "claude_spending.db")
+# Store database in a persistent system location, NOT in the code repository
+# This prevents git operations/resets from deleting the data
+DB_DIR = "/etc/evolve"
+if not os.path.exists(DB_DIR):
+    try:
+        os.makedirs(DB_DIR, mode=0o755, exist_ok=True)
+    except OSError:
+        # Fallback for local development (mac/windows) where /etc/evolve might not be writable
+        DB_DIR = os.path.join(os.path.expanduser("~"), ".evolve_data")
+        os.makedirs(DB_DIR, mode=0o755, exist_ok=True)
+
+DB_PATH = os.path.join(DB_DIR, "claude_spending.db")
 DEFAULT_MONTHLY_CAP = 20.00  # $20/month default
 
 class SpendingTracker:
