@@ -979,24 +979,18 @@ async def check_duplicate(request: DuplicateCheckRequest):
 
 
 @app.get("/verify-tagging")
-async def verify_tagging():
+async def verify_tagging(limit: int = 500):
     """
-    Verify which tagging passes have been applied to documents
-    
-    Returns:
-        Statistics showing:
-        - Total documents
-        - Documents with Pass 1 (keyword tags) - should be 100%
-        - Documents with Pass 2 (AI enhancement - primary_theme) - Ollama/OpenAI
-        - Documents with Pass 3 (Claude analysis) - not stored yet, would need separate tracking
+    Verify which tagging passes have been applied to documents.
+    Returns detailed list for frontend table.
     """
     try:
-        # Query Pinecone to get sample of documents
+        # Query Pinecone to get all documents (limited by param)
         query_vector = [0.0] * PINECONE_DIMENSION
         results = await pinecone_with_retry(
             lambda: index.query(
                 vector=query_vector,
-                top_k=10000,  # Get all documents
+                top_k=10000,  # Query broad to aggregate, then slice
                 include_metadata=True
             ),
             max_retries=2,
@@ -1007,12 +1001,12 @@ async def verify_tagging():
             return {
                 "status": "success",
                 "message": "No documents found in database",
-                "total_documents": 0
+                "total_documents": 0,
+                "documents": []
             }
         
-        # Group by title and analyze tagging
+        # Group by title
         documents_dict = {}
-        total_chunks = len(results.matches)
         
         for match in results.matches:
             title = match.metadata.get('title', 'Unknown')
@@ -1022,74 +1016,66 @@ async def verify_tagging():
                     'title': title,
                     'chunk_count': 0,
                     'has_keyword_tags': False,
-                    'has_ai_enhancement': False,
-                    'sample_tags': [],
-                    'sample_primary_theme': None,
-                    'sample_categories': {}
+                    'ai_providers': set(),
+                    'last_analyzed': None # Placeholder for pass 3
                 }
             
             doc = documents_dict[title]
             doc['chunk_count'] += 1
             
-            # Check Pass 1: Keyword tags (should always exist)
+            # Check Pass 1: Keywords
             tags = match.metadata.get('tags', [])
             if tags and len(tags) > 0:
                 doc['has_keyword_tags'] = True
-                if not doc['sample_tags']:
-                    doc['sample_tags'] = tags[:10]  # First 10 tags
             
-            # Check Pass 2: AI enhancement (primary_theme indicates Ollama/OpenAI was used)
-            primary_theme = match.metadata.get('primary_theme', '')
-            if primary_theme:
-                doc['has_ai_enhancement'] = True
-                if not doc['sample_primary_theme']:
-                    doc['sample_primary_theme'] = primary_theme
+            # Check Pass 2: AI Provider & Model
+            provider = match.metadata.get('ai_provider')
+            if provider:
+                doc['ai_providers'].add(str(provider).upper())
+                
+            # Check for legacy primary_theme as fallback for AI presence
+            if not provider and match.metadata.get('primary_theme'):
+                doc['ai_providers'].add("PARTIAL_AI")
+
+        # Format for frontend
+        formatted_docs = []
+        for title, data in documents_dict.items():
+            # Pass 1 Status
+            p1_status = "Complete" if data['has_keyword_tags'] else "Missing"
             
-            # Sample categories
-            if not doc['sample_categories']:
-                doc['sample_categories'] = {
-                    'chakras': match.metadata.get('all_chakras', [])[:3],
-                    'traditions': match.metadata.get('all_traditions', [])[:3],
-                    'teachers': match.metadata.get('all_teachers', [])[:3],
-                    'consciousness_level': match.metadata.get('consciousness_level', '')
-                }
-        
-        # Calculate statistics
-        total_docs = len(documents_dict)
-        docs_with_keywords = sum(1 for d in documents_dict.values() if d['has_keyword_tags'])
-        docs_with_ai = sum(1 for d in documents_dict.values() if d['has_ai_enhancement'])
-        
-        # Sample a few documents for detailed view
-        sample_docs = list(documents_dict.values())[:5]
+            # Pass 2 Status
+            providers = list(data['ai_providers'])
+            if not providers:
+                p2_status = "Pending"
+            elif "OPENAI" in providers:
+                p2_status = "OPENAI" # Priority
+            elif "OLLAMA" in providers:
+                p2_status = "OLLAMA"
+            elif "PARTIAL_AI" in providers:
+                p2_status = "Partial AI"
+            else:
+                p2_status = ", ".join(providers)
+            
+            formatted_docs.append({
+                "title": title,
+                "chunk_count": data['chunk_count'],
+                "pass_1_status": p1_status,
+                "pass_2_status": p2_status,
+                "raw_providers": providers
+            })
+            
+        # Sort by title
+        formatted_docs.sort(key=lambda x: x['title'])
         
         return {
             "status": "success",
-            "summary": {
-                "total_documents": total_docs,
-                "total_chunks": total_chunks,
-                "pass_1_keyword_tags": {
-                    "count": docs_with_keywords,
-                    "percentage": round((docs_with_keywords / total_docs * 100) if total_docs > 0 else 0, 1),
-                    "status": "✅ All documents tagged" if docs_with_keywords == total_docs else f"⚠️ {total_docs - docs_with_keywords} missing tags"
-                },
-                "pass_2_ai_enhancement": {
-                    "count": docs_with_ai,
-                    "percentage": round((docs_with_ai / total_docs * 100) if total_docs > 0 else 0, 1),
-                    "status": "✅ All enhanced" if docs_with_ai == total_docs else f"ℹ️ {total_docs - docs_with_ai} without AI enhancement (Ollama/OpenAI)"
-                },
-                "pass_3_claude_analysis": {
-                    "count": 0,
-                    "percentage": 0,
-                    "status": "ℹ️ Run 'Claude Deep Analysis' button to apply",
-                    "note": "Claude analysis finds cross-document connections and is separate from upload tagging"
-                }
-            },
-            "sample_documents": sample_docs
+            "total_documents": len(formatted_docs),
+            "documents": formatted_docs[:limit]
         }
         
     except asyncio.TimeoutError:
         logger.error("Tagging verification timed out")
-        raise HTTPException(status_code=504, detail="Tagging verification timed out - please try again")
+        raise HTTPException(status_code=504, detail="Tagging verification timed out")
     except Exception as e:
         logger.error(f"Tagging verification failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
