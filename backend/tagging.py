@@ -542,8 +542,9 @@ async def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "oll
         try:
             # Choose AI provider
             if ai_provider == "ollama":
-                # Ollama is still synchronous (local call)
-                ai_tags = generate_tags_ollama(text, model=ollama_model)
+                # Run synchronous Ollama call in a separate thread to avoid blocking the event loop
+                import asyncio
+                ai_tags = await asyncio.to_thread(generate_tags_ollama, text, model=ollama_model)
             elif ai_provider == "openai":
                 if not openai_client:
                     raise ValueError("openai_client is required when ai_provider='openai'")
