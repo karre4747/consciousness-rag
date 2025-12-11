@@ -1006,7 +1006,7 @@ async def verify_tagging(limit: int = 500):
         # This is strictly better than query(top_k=10000)
         all_vector_ids = []
         try:
-            for ids in index.list(limit=10000):
+            for ids in index.list(): # Fetch all IDs
                 all_vector_ids.extend(ids)
             logger.info(f"Verify Tagging: Retrieved {len(all_vector_ids)} vector IDs")
         except Exception as list_err:
