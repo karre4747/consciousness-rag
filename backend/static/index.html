@@ -1145,11 +1145,7 @@
                 const fileItem = document.createElement('div');
                 fileItem.className = 'file-item';
 
-                fileItem.innerHTML = ` <span class="file-name" >$ {
-                        file.name
-                    }
-
-                    </span> <span class="file-status status-pending" id="status-${index}" >Pending</span> `;
+                fileItem.innerHTML = `<span class="file-name">${file.name}</span> <span class="file-status status-pending" id="status-${index}">Pending</span>`;
                 fileList.appendChild(fileItem);
             });
         }
@@ -1167,11 +1163,7 @@
             for (let i = 0; i < selectedFiles.length; i++) {
                 const file = selectedFiles[i];
 
-                const statusEl = document.getElementById(`status-$ {
-                        i
-                    }
-
-                    `);
+                const statusEl = document.getElementById(`status-${i}`);
                 const title = file.name.replace(/\.[^/.]+$/, '');
 
                 // Check for duplicates before uploading
@@ -1213,23 +1205,7 @@
                 progressFill.textContent = progress + '%';
             }
 
-            summary.innerHTML = ` <div class="summary-item"><div class="summary-number">$ {
-                selectedFiles.length
-            }
-
-            </div><div>Total Files</div></div><div class="summary-item"><div class="summary-number" style="color: #00b894;">$ {
-                successful
-            }
-
-            </div><div>Successful</div></div><div class="summary-item"><div class="summary-number" style="color: #d63031;">$ {
-                failed
-            }
-
-            </div><div>Failed</div></div><div class="summary-item"><div class="summary-number" style="color: #f39c12;">$ {
-                skipped
-            }
-
-            </div><div>Skipped</div></div>`;
+            summary.innerHTML = `<div class="summary-item"><div class="summary-number">${selectedFiles.length}</div><div>Total Files</div></div><div class="summary-item"><div class="summary-number" style="color: #00b894;">${successful}</div><div>Successful</div></div><div class="summary-item"><div class="summary-number" style="color: #d63031;">${failed}</div><div>Failed</div></div><div class="summary-item"><div class="summary-number" style="color: #f39c12;">${skipped}</div><div>Skipped</div></div>`;
 
             // Refresh the document list to show newly uploaded files
             await loadDocumentList();
@@ -1255,15 +1231,7 @@
                 // Estimate size for user feedback
                 const sizeKB = Math.round(cleanedText.length / 1024);
 
-                console.log(`Processing $ {
-                        file.name
-                    }
-
-                    : $ {
-                        sizeKB
-                    }
-
-                    KB`);
+                console.log(`Processing ${file.name}: ${sizeKB} KB`);
 
                 const response = await fetch('/upload', {
 
@@ -1288,21 +1256,13 @@
                         detail: 'Unknown error'
                     }));
 
-                    console.error(`Upload failed for $ {
-                file.name
-            }
-
-            :`, errorData);
+                    console.error(`Upload failed for ${file.name}:`, errorData);
                     throw new Error(errorData.detail || 'Upload failed');
                 }
 
                 const result = await response.json();
 
-                console.log(`Upload success for $ {
-                file.name
-            }
-
-            :`, result);
+                console.log(`Upload success for ${file.name}:`, result);
                 return true;
 
             }
@@ -1311,15 +1271,7 @@
                 console.error('Upload error:', error);
 
                 // Show error in browser console for debugging
-                alert(`Failed to upload $ {
-                    file.name
-                }
-
-                : $ {
-                    error.message
-                }
-
-                \n\nCheck browser console for details.`);
+                alert(`Failed to upload ${file.name}: ${error.message}\n\nCheck browser console for details.`);
                 return false;
             }
         }
@@ -1895,25 +1847,13 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    statusEl.textContent = `✅ Successfully re-tagged $ {
-                data.documents_processed
-            }
-
-            documents ($ {
-                    data.chunks_updated
-                }
-
-                chunks updated).`;
+                    statusEl.textContent = `✅ Successfully re-tagged ${data.documents_processed} documents (${data.chunks_updated} chunks updated).`;
                     // Refresh verification
                     setTimeout(() => verifyTagging(), 2000);
                 }
 
                 else {
-                    statusEl.textContent = `Re-tagging failed: $ {
-                data.message || 'Unknown error'
-            }
-
-            `;
+                    statusEl.textContent = `Re-tagging failed: ${data.message || 'Unknown error'}`;
                 }
             }
 
@@ -1950,25 +1890,13 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    statusEl.textContent = `✅ Successfully re-tagged $ {
-                data.documents_processed
-            }
-
-            documents ($ {
-                    data.chunks_updated
-                }
-
-                chunks updated).`;
+                    statusEl.textContent = `✅ Successfully re-tagged ${data.documents_processed} documents (${data.chunks_updated} chunks updated).`;
                     // Refresh verification
                     setTimeout(() => verifyTagging(), 2000);
                 }
 
                 else {
-                    statusEl.textContent = `Re-tagging failed: $ {
-                data.message || 'Unknown error'
-            }
-
-            `;
+                    statusEl.textContent = `Re-tagging failed: ${data.message || 'Unknown error'}`;
                 }
             }
 
@@ -2046,11 +1974,7 @@
                         detail: 'Query failed'
                     }));
 
-                    throw new Error(errorData.detail || `Server error: $ {
-                    response.status
-                }
-
-                `);
+                    throw new Error(errorData.detail || `Server error: ${response.status}`);
                 }
 
                 const result = await response.json();
@@ -2064,11 +1988,7 @@
             catch (error) {
                 console.error('Query error:', error);
 
-                showError(`Failed to process query: $ {
-                    error.message
-                }
-
-                `);
+                showError(`Failed to process query: ${error.message}`);
             }
 
             finally {

@@ -280,6 +280,9 @@ def generate_answer(question: str, context_chunks: List[Dict[str, Any]], program
     
     # Build context from retrieved chunks (with safety checks for Pinecone match objects)
     context_parts = []
+    total_context_chars = 0
+    MAX_CONTEXT_CHARS = 8000  # Limit context to ~2000 tokens for faster processing
+    
     for chunk in context_chunks:
         # Handle Pinecone match objects (they have .metadata attribute, not dict key)
         if hasattr(chunk, 'metadata'):
@@ -294,7 +297,16 @@ def generate_answer(question: str, context_chunks: List[Dict[str, Any]], program
         text = metadata.get('text', '') if hasattr(metadata, 'get') else getattr(metadata, 'text', '')
         
         if text:  # Only add non-empty chunks
-            context_parts.append(f"[Source: {title}]\n{text}")
+            # Truncate individual chunks to 1500 chars max
+            truncated_text = text[:1500] + "..." if len(text) > 1500 else text
+            chunk_text = f"[Source: {title}]\n{truncated_text}"
+            
+            # Stop adding context if we exceed limit
+            if total_context_chars + len(chunk_text) > MAX_CONTEXT_CHARS:
+                break
+                
+            context_parts.append(chunk_text)
+            total_context_chars += len(chunk_text)
     
     context = "\n\n".join(context_parts) if context_parts else "No context available."
     
@@ -328,7 +340,7 @@ ANSWER:"""
     try:
         message = anthropic_client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=2000,
+            max_tokens=1000,  # Reduced from 2000 for faster generation
             messages=[{"role": "user", "content": prompt}]
         )
         
