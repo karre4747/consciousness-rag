@@ -130,14 +130,13 @@ app.add_middleware(
 class CSPMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        # Set CSP header to allow JavaScript execution
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: https:; "
             "font-src 'self' data:; "
-            "connect-src 'self' http://localhost:* https://*;"
+            "connect-src 'self' https://*;"
         )
         return response
 
@@ -366,8 +365,7 @@ def read_root():
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
-            "Expires": "0",
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:* https://*;"
+            "Expires": "0"
         }
     )
 
@@ -1063,7 +1061,7 @@ async def verify_tagging(limit: int = 50, offset: int = 0):
         if not paginated_ids:
              return {
                 "status": "success",
-                "total_documents": len(all_vector_ids), # Total chunks, roughly maps to docs
+                "total_documents": len(all_vector_ids), # Return TOTAL found, not 0
                 "documents": []
             }
 
