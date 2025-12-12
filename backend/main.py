@@ -1034,20 +1034,45 @@ async def verify_tagging(limit: int = 500):
         if all_vector_ids:
             # We have IDs from list(), need to fetch metadata in batches
             FETCH_BATCH_SIZE = 1000
+            CONCURRENT_LIMIT = 5  # Conservative limit to avoid rate limits
+            semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
+            
+            async def fetch_batch_safe(ids):
+                """Helper to fetch with semaphore and safe variable capture"""
+                async with semaphore:
+                    return await pinecone_with_retry(
+                        lambda: index.fetch(ids=ids),
+                        max_retries=3,
+                        timeout=45.0
+                    )
+            
+            # Create tasks for all batches
+            tasks = []
             for i in range(0, len(all_vector_ids), FETCH_BATCH_SIZE):
                 batch_ids = all_vector_ids[i:i + FETCH_BATCH_SIZE]
+                # Pass batch_ids directly to the async helper function
+                # This guarantees value capture, avoiding the closure bug
+                tasks.append(fetch_batch_safe(batch_ids))
                 
-                fetched = await pinecone_with_retry(
-                    lambda: index.fetch(ids=batch_ids),
-                    max_retries=2,
-                    timeout=30.0  # Increased timeout for fetch
-                )
-                
-                for vec_id, vector_data in fetched.vectors.items():
-                    process_vector_metadata(vector_data.metadata, documents_dict)
+            logger.info(f"Verify Tagging: Fetching metadata for {len(all_vector_ids)} chunks in {len(tasks)} batches...")
+            
+            # Execute parallel fetches
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results
+            for res in results:
+                if isinstance(res, Exception):
+                    logger.error(f"Batch fetch failed: {res}")
+                    continue
+                    
+                if hasattr(res, 'vectors'):
+                    for vec_id, vector_data in res.vectors.items():
+                        process_vector_metadata(vector_data.metadata, documents_dict)
                     
         elif 'all_matches' in locals() and all_matches:
              # Fallback path
+             for match in all_matches:
+                 process_vector_metadata(match.metadata, documents_dict)
              for match in all_matches:
                  process_vector_metadata(match.metadata, documents_dict)
 
