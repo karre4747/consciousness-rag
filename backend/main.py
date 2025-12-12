@@ -629,9 +629,9 @@ async def upload_document(request: UploadRequest):
             if vectors_to_upsert:
                 try:
                     await pinecone_with_retry(
-                        lambda: index.upsert(vectors=vectors_to_upsert),
+                        lambda v=vectors_to_upsert: index.upsert(vectors=v),
                         max_retries=3,
-                        timeout=15.0
+                        timeout=20.0
                     )
                     total_uploaded += len(vectors_to_upsert)
                     logger.info(f"Uploaded batch: {len(vectors_to_upsert)} vectors (total: {total_uploaded}/{total_chunks})")
@@ -1033,8 +1033,9 @@ async def verify_tagging(limit: int = 500):
         
         if all_vector_ids:
             # We have IDs from list(), need to fetch metadata in batches
-            FETCH_BATCH_SIZE = 1000
-            CONCURRENT_LIMIT = 5  # Conservative limit to avoid rate limits
+            # REDUCED BATCH SIZE to avoid 414 Request-URI Too Large error
+            FETCH_BATCH_SIZE = 200 
+            CONCURRENT_LIMIT = 10  # Increased concurrency to compensate for smaller batches
             semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
             
             async def fetch_batch_safe(ids):
@@ -1371,7 +1372,7 @@ async def retag_documents(request: RetagRequest):
             
             if vectors_with_embeddings:
                 await pinecone_with_retry(
-                    lambda: index.upsert(vectors=vectors_with_embeddings),
+                    lambda v=vectors_with_embeddings: index.upsert(vectors=v),
                     max_retries=3,
                     timeout=15.0
                 )
