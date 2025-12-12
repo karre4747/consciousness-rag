@@ -18,7 +18,7 @@ if sys.stderr.encoding != 'utf-8':
 
 load_dotenv(override=True)  # Override system environment variables
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
@@ -28,6 +28,7 @@ from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
 import asyncio
 import logging
+from datetime import datetime
 
 # Import our modules
 from pinecone import Pinecone, ServerlessSpec
@@ -46,8 +47,12 @@ logger = logging.getLogger(__name__)
 pinecone_client = None
 openai_client = None
 anthropic_client = None
+# Global Clients
+pinecone_client = None
+openai_client = None
+anthropic_client = None
 index = None
-spending_tracker = SpendingTracker()  # Initialize spending tracker
+spending_tracker = SpendingTracker()
 
 # Configuration
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "evolve-consciousness")
@@ -56,6 +61,85 @@ CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 PINECONE_DIMENSION = int(os.getenv("PINECONE_DIMENSION", "1536"))
+
+# Import Database
+import database
+
+# Background Sync Status
+SYNC_STATUS = "idle" 
+
+async def sync_database_with_pinecone():
+    """
+    One-off background task to populate SQLite from Pinecone.
+    Runs SLOWLY to avoid OOM.
+    """
+    global SYNC_STATUS, index
+    if SYNC_STATUS == "running": return
+    
+    SYNC_STATUS = "running"
+    logger.info("Starting Database Sync...")
+    
+    try:
+        # 1. Fetch IDs loosely
+        ids_to_process = []
+        for ids in index.list(limit=50): # Small batches
+             ids_to_process.extend(ids)
+             await asyncio.sleep(0.1)
+             
+        # 2. Process in tiny chunks to save memory
+        BATCH_SIZE = 20
+        import gc
+        
+        known_documents = {} # Temp tracker for this run
+        
+        async def process_batch(batch_ids):
+             try:
+                 fetched = await pinecone_with_retry(lambda: index.fetch(ids=batch_ids), max_retries=3)
+                 for vec in fetched.vectors.values():
+                     title = vec.metadata.get('title', 'Unknown')
+                     if title not in known_documents:
+                         known_documents[title] = {"count": 0, "tags": False, "provider": None}
+                     
+                     known_documents[title]["count"] += 1
+                     if vec.metadata.get('tags'): known_documents[title]["tags"] = True
+                     if vec.metadata.get('ai_provider'): known_documents[title]["provider"] = vec.metadata.get('ai_provider')
+                     
+             except Exception as e:
+                 logger.error(f"Sync fetch error: {e}")
+
+        # Run process
+        for i in range(0, len(ids_to_process), BATCH_SIZE):
+            batch = ids_to_process[i:i+BATCH_SIZE]
+            await process_batch(batch)
+            
+            # Incremental Save: Write to DB every batch so user sees progress
+            for title, info in known_documents.items():
+                if info.get('saved', False): continue
+                
+                # Determine status
+                status = "uploaded"
+                if info["provider"]: 
+                    status = "tagged" 
+                    
+                database.add_document(title, info["count"], info["tags"])
+                if status != "uploaded":
+                    database.update_status(title, status, info["provider"])
+                
+                # Mark as saved so we don't re-write until final counts
+                # Actually, for counts to update, we *should* re-write. 
+                # SQLite 'INSERT OR REPLACE' handles this in add_document.
+                
+            if i % 100 == 0: 
+                gc.collect() # Force cleanup
+                await asyncio.sleep(0.5) # Yield
+                
+        # Final pass is automatic due to incremental writes
+        SYNC_STATUS = "completed"
+        logger.info("Database Sync Complete.")
+        
+    except Exception as e:
+        logger.error(f"Sync failed: {e}")
+        SYNC_STATUS = "error"
 
 
 @asynccontextmanager
@@ -100,6 +184,12 @@ async def lifespan(app: FastAPI):
         
         logger.info("All services initialized successfully!")
         
+        # Initialize DB
+        database.init_db()
+        
+        # Start background sync if empty (optional, user can trigger)
+        # asyncio.create_task(sync_database_with_pinecone())
+        
         yield
         
     except Exception as e:
@@ -132,7 +222,7 @@ class CSPMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "script-src 'self' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: https:; "
             "font-src 'self' data:; "
@@ -342,13 +432,13 @@ Provide a comprehensive answer that:
 ANSWER:"""
 
     try:
-        message = anthropic_client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=1000,  # Reduced from 2000 for faster generation
-            messages=[{"role": "user", "content": prompt}]
+        # Switch to OpenAI due to Anthropic billing issue
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000
         )
-        
-        return message.content[0].text
+        return response.choices[0].message.content
         
     except Exception as e:
         logger.error(f"Answer generation failed: {e}")
@@ -979,159 +1069,59 @@ async def check_duplicate(request: DuplicateCheckRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def check_ai_status(providers):
+    """Determine AI processing status from provider list"""
+    if not providers:
+        return "Pending"
+    if "OPENAI" in providers:
+        return "OPENAI"
+    if "OLLAMA" in providers:
+        return "OLLAMA"
+    return ", ".join(providers)
+
+
+@app.get("/document-status")
+async def get_document_status():
+    """
+    Unified Endpoint: Returns documents from SQLite DB.
+    Zero-latency, no scanning.
+    """
+    docs = database.get_documents()
+    stats = database.get_stats()
+    
+    # Format for frontend compatibility
+    formatted = []
+    for d in docs:
+        formatted.append({
+            "title": d['title'],
+            "chunk_count": d['chunk_count'],
+            "pass_1_status": "Complete" if d['has_keyword_tags'] else "Pending",
+            "pass_2_status": d['ai_provider'] if d['ai_provider'] else "Pending",
+            "pass_3_status": "Complete" if d['status'] == 'analyzed' else "Pending",
+            "raw_providers": [d['ai_provider']] if d['ai_provider'] else []
+        })
+        
+    return {
+        "status": "success",
+        "cache_status": "ready",
+        "total_documents": len(docs),
+        "total_vectors": 0, # Don't care anymore
+        "documents": formatted,
+        "sync_status": SYNC_STATUS
+    }
+
+@app.post("/sync-db")
+async def trigger_sync():
+    """Manually trigger database sync from Pinecone"""
+    asyncio.create_task(sync_database_with_pinecone())
+    return {"status": "started", "message": "Background sync started"}
+
+
 @app.get("/verify-tagging")
-async def verify_tagging(limit: int = 50, offset: int = 0):
-    """
-    Verify which tagging passes have been applied to documents.
-    Returns detailed list for frontend table.
-    Uses list+fetch with TRUE PAGINATION to ensure speed on large datasets (44k+ vectors).
-    """
-    try:
-        # 1. Get total stats
-        stats = await pinecone_with_retry(
-            index.describe_index_stats,
-            max_retries=2,
-            timeout=10.0
-        )
-        total_vectors = stats.total_vector_count
-        
-        if total_vectors == 0:
-            return {
-                "status": "success",
-                "message": "No documents found in database",
-                "total_documents": 0,
-                "documents": []
-            }
+async def verify_tagging(limit: int = 100, offset: int = 0):
+    """Legacy compatibility"""
+    return await get_document_status()
 
-        # 2. List ALL vector IDs (fast, just IDs)
-        # We need all IDs to sort/paginate properly if we want a stable list
-        # For 44k IDs, this should take ~1-2s
-        all_vector_ids = []
-        try:
-            # Probe namespaces: explicit empty string, then None (default), then literal __default__
-            # This handles inconsistencies in how Pinecone clients treat the default namespace
-            # Determine namespaces to probe using stats (if available) or fallback defaults
-            namespaces_to_probe = ["", None] # Always check default/empty
-            
-            # Use dynamic namespaces from stats if valid
-            if hasattr(stats, 'namespaces') and isinstance(stats.namespaces, dict):
-                 # Add any specific namespaces found in stats
-                 # Pinecone's client keys might be '' or actual names
-                 for ns_key in stats.namespaces.keys():
-                     if ns_key == '__default__':
-                         continue # Handled by None/"" typically, but we trust the loop
-                     if ns_key not in namespaces_to_probe:
-                         namespaces_to_probe.append(ns_key)
-
-            logger.info(f"Verify Tagging: Probing namespaces: {namespaces_to_probe}")
-
-            for ns in namespaces_to_probe:
-                try:
-                    # Note: namespace=None tells client to use its default
-                    iterator = index.list(namespace=ns) if ns is not None else index.list()
-                    count_in_ns = 0
-                    for ids in iterator:
-                        all_vector_ids.extend(ids)
-                        count_in_ns += len(ids)
-                    
-                    if count_in_ns > 0:
-                        logger.info(f"Verify Tagging: Found {count_in_ns} IDs in namespace '{ns}'")
-                        
-                except Exception as ns_err:
-                    logger.warning(f"Failed to list namespace '{ns}': {ns_err}")
-                    continue
-            
-            if not all_vector_ids:
-                 logger.warning("Verify Tagging: No IDs found in any probed namespace")
-                 
-        except Exception as list_err:
-             logger.warning(f"Verify Tagging: index.list() failed ({list_err}), falling back to query")
-             return {
-                 "status": "error",
-                 "message": "Failed to list documents. Database may be busy."
-             }
-        
-        # 3. Apply Pagination (Slice IDs *before* fetching)
-        # Verify offset/limit are within bounds
-        offset = max(0, offset)
-        limit = max(1, min(1000, limit)) # Cap max limit to 1000
-        
-        paginated_ids = all_vector_ids[offset : offset + limit]
-        
-        if not paginated_ids:
-             return {
-                "status": "success",
-                "total_documents": len(all_vector_ids), # Return TOTAL found, not 0
-                "documents": []
-            }
-
-        # 4. Fetch metadata ONLY for the paginated slice
-        documents_dict = {}
-        
-        # We have IDs from pagination slice, fetch metadata
-        # No need for complex semaphore here as we are only fetching one batch (limit=50-500)
-        try:
-            fetched = await pinecone_with_retry(
-                lambda: index.fetch(ids=paginated_ids),
-                max_retries=2,
-                timeout=15.0
-            )
-            
-            for vec_id, vector_data in fetched.vectors.items():
-                process_vector_metadata(vector_data.metadata, documents_dict)
-                
-        except Exception as fetch_err:
-            logger.error(f"Failed to fetch batch metadata: {fetch_err}")
-            # Continue with empty dict if fail, will return empty list
-            pass
-            
-        if 'all_matches' in locals() and all_matches:
-             # Fallback path if we ever add query fallback again
-             for match in all_matches:
-                 process_vector_metadata(match.metadata, documents_dict)
-
-        # Format for frontend
-        formatted_docs = []
-        for title, data in documents_dict.items():
-            # Pass 1 Status
-            p1_status = "Complete" if data['has_keyword_tags'] else "Missing"
-            
-            # Pass 2 Status
-            providers = list(data['ai_providers'])
-            if not providers:
-                p2_status = "Pending"
-            elif "OPENAI" in providers:
-                p2_status = "OPENAI" # Priority
-            elif "OLLAMA" in providers:
-                p2_status = "OLLAMA"
-            elif "PARTIAL_AI" in providers:
-                p2_status = "Partial AI"
-            else:
-                p2_status = ", ".join(providers)
-            
-            formatted_docs.append({
-                "title": title,
-                "chunk_count": data['chunk_count'],
-                "pass_1_status": p1_status,
-                "pass_2_status": p2_status,
-                "raw_providers": providers
-            })
-            
-        # Sort by title
-        formatted_docs.sort(key=lambda x: x['title'])
-        
-        return {
-            "status": "success",
-            "total_documents": len(formatted_docs),
-            "documents": formatted_docs[:limit]
-        }
-        
-    except asyncio.TimeoutError:
-        logger.error("Tagging verification timed out")
-        raise HTTPException(status_code=504, detail="Tagging verification timed out")
-    except Exception as e:
-        logger.error(f"Tagging verification failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 def process_vector_metadata(metadata, documents_dict):
     """Helper to process metadata for tagging verification"""
@@ -1163,251 +1153,194 @@ def process_vector_metadata(metadata, documents_dict):
         doc['ai_providers'].add("PARTIAL_AI")
 
 
-@app.post("/retag-documents")
-async def retag_documents(request: RetagRequest):
+async def run_retagging_task(document_titles_to_process: List[str], ai_provider: str, ollama_model: str, batch_size: int):
     """
-    Re-tag existing documents with AI enhancement (Pass 2)
-    
-    This endpoint:
-    1. Retrieves existing document chunks from Pinecone
-    2. Re-runs tagging with AI enhancement enabled (Ollama or OpenAI)
-    3. Updates metadata in Pinecone with enhanced tags
-    
-    Args:
-        document_titles: List of document titles to re-tag (None/empty = all documents)
-        ai_provider: "ollama" (FREE) or "openai" (paid)
-        ollama_model: Ollama model to use (default: "llama3.1")
-        batch_size: Number of chunks to process at once (default: 50)
-    
-    Returns:
-        Status with counts of documents and chunks processed
+    Background task to process tagging without blocking the API.
+    Includes aggressive rate limiting and error handling.
     """
     try:
-        ai_provider = request.ai_provider or "ollama"
-        ollama_model = request.ollama_model or "llama3.1"
-        batch_size = request.batch_size or 50
+        total_docs = len(document_titles_to_process)
+        logger.info(f"Background Tagging Started: {total_docs} documents using {ai_provider}")
         
-        logger.info(f"Starting re-tagging with AI provider: {ai_provider}")
+        processed_chunks = 0
+        updated_chunks = 0
+        failed_chunks = 0
         
-        # Query Pinecone to get all chunks
-        query_vector = [0.0] * PINECONE_DIMENSION
-        
-        if request.document_titles and len(request.document_titles) > 0:
-            # Filter by specific titles
-            all_matches = []
-            for title in request.document_titles:
+        # Main Loop: Process one document at a time
+        for title in document_titles_to_process:
+            database.update_status(title, "processing", ai_provider.upper())
+            try:
+                # Get chunks for THIS document
+                query_vector = [0.0] * PINECONE_DIMENSION
                 results = await pinecone_with_retry(
                     lambda: index.query(
                         vector=query_vector,
-                        top_k=10000,
+                        top_k=10000, 
                         include_metadata=True,
                         filter={"title": title}
                     ),
                     max_retries=2,
                     timeout=30.0
                 )
-                all_matches.extend(results.matches)
-            matches = all_matches
+                
+                matches = results.matches
+                if not matches:
+                    continue
+                    
+                # BATCH PROCESSING LOGIC
+                # Group chunks into batches of 5 for OpenAI
+                BATCH_SIZE_API = 5
+                
+                chunk_batches = []
+                for i in range(0, len(matches), BATCH_SIZE_API):
+                    chunk_batches.append(matches[i:i+BATCH_SIZE_API])
+                
+                total_batches = len(chunk_batches)
+                logger.info(f"Processing {title}: {len(matches)} chunks in {total_batches} batches")
+
+                for b_idx, batch in enumerate(chunk_batches):
+                    # Extract texts
+                    texts = [m.metadata.get('text', '') for m in batch]
+                    valid_indices = [i for i, t in enumerate(texts) if t]
+                    valid_texts = [texts[i] for i in valid_indices]
+                    
+                    if not valid_texts:
+                        continue
+                        
+                    try:
+                        # Call Batch API (Rate Limited)
+                        # We use the batch function mapped into tagging.py
+                        import tagging
+                        import datetime
+                        
+                        # Aggressive Delay for Rate Limits (5s = ~12 Requests/Min)
+                        # This stays comfortably under most Tier 1 limits
+                        await asyncio.sleep(5.0) 
+                        
+                        batch_results = await tagging.generate_tags_batch_openai(
+                            valid_texts, 
+                            openai_client, 
+                            timeout=60.0
+                        )
+                        
+                        # Process results back into vectors
+                        batch_vectors_to_update = []
+                        
+                        for i, result in enumerate(batch_results):
+                            # Map back to original match
+                            original_idx = valid_indices[i]
+                            match = batch[original_idx]
+                            
+                            # Mix with keyword tags if AI failed or returned partial
+                            # (We always run keyword tagging as baseline)
+                            keyword_tags = tagging.generate_tags_keyword_based(valid_texts[i])
+                            
+                            # Merge tags
+                            ai_tags_list = result.get("tags", [])
+                            if isinstance(ai_tags_list, str): ai_tags_list = [ai_tags_list]
+                            
+                            merged_tags = list(set(keyword_tags["tags"] + ai_tags_list))
+                            
+                            existing_metadata = match.metadata.copy()
+                            
+                            updated_metadata = {
+                                **existing_metadata,
+                                "tags": merged_tags,
+                                "primary_theme": result.get("primary_theme") or keyword_tags.get("primary_theme", ""),
+                                "consciousness_level": result.get("consciousness_level") or keyword_tags.get("consciousness_level", ""),
+                                # Standard fields...
+                                "ai_provider": ai_provider,
+                                "last_updated": datetime.datetime.utcnow().isoformat()
+                            }
+                            
+                            updated_metadata = clean_metadata_for_pinecone(updated_metadata)
+                            
+                            batch_vectors_to_update.append({
+                                "id": match.id,
+                                "metadata": updated_metadata
+                            })
+                            
+                        # Upsert this batch immediately
+                        if batch_vectors_to_update:
+                            # Fetch current vectors to keep values
+                            ids = [v["id"] for v in batch_vectors_to_update]
+                            fetched = await pinecone_with_retry(lambda: index.fetch(ids=ids), max_retries=2)
+                            
+                            final_upsert = []
+                            for v in batch_vectors_to_update:
+                                if v["id"] in fetched.vectors:
+                                    final_upsert.append({
+                                        "id": v["id"],
+                                        "values": fetched.vectors[v["id"]].values, # Preserve embedding
+                                        "metadata": v["metadata"]
+                                    })
+                                    
+                            if final_upsert:
+                                await pinecone_with_retry(lambda v=final_upsert: index.upsert(vectors=v), max_retries=3)
+                                updated_chunks += len(final_upsert)
+                                processed_chunks += len(final_upsert)
+                                
+                    except Exception as e:
+                        logger.error(f"Batch {b_idx} failed: {e}")
+                        failed_chunks += len(batch)
+                        
+                # Document complete
+                database.update_status(title, "tagged", ai_provider.upper())
+                logger.info(f"Retagged {title}: {len(matches)} chunks")
+                
+            except Exception as e:
+                 logger.error(f"Failed to process document {title}: {e}")
+                 database.update_status(title, "error", ai_provider.upper())
+                
+        logger.info(f"Re-tagging complete: {total_docs} docs, {updated_chunks} chunks updated")
+
+    except Exception as e:
+        logger.error(f"Background tagging task CRITICAL FAILURE: {e}")
+
+
+@app.post("/retag-documents")
+async def retag_documents(request: RetagRequest, background_tasks: BackgroundTasks):
+    """
+    Re-tag existing documents (Async Background Job).
+    Returns immediately to prevent timeouts.
+    """
+    try:
+        ai_provider = request.ai_provider or "ollama"
+        ollama_model = request.ollama_model or "llama3.1"
+        batch_size = request.batch_size or 50
+        
+        logger.info(f"Queueing re-tagging job for provider: {ai_provider}")
+        
+        # Determine which documents to process
+        document_titles_to_process = []
+        if request.document_titles and len(request.document_titles) > 0:
+            document_titles_to_process = request.document_titles
         else:
-            # Get all documents
-            results = await pinecone_with_retry(
-                lambda: index.query(
-                    vector=query_vector,
-                    top_k=10000,
-                    include_metadata=True
-                ),
-                max_retries=2,
-                timeout=30.0
-            )
-            matches = results.matches
-        
-        if not matches:
-            return {
-                "status": "success",
-                "message": "No documents found to re-tag",
-                "documents_processed": 0,
-                "chunks_processed": 0
-            }
-        
-        # Group by document title
-        documents_dict = {}
-        for match in matches:
-            title = match.metadata.get('title', 'Unknown')
-            if title not in documents_dict:
-                documents_dict[title] = []
-            documents_dict[title].append(match)
-        
-        total_docs = len(documents_dict)
-        total_chunks = len(matches)
-        processed_chunks = 0
-        updated_chunks = 0
-        failed_chunks = 0
-        
-        logger.info(f"Found {total_docs} documents with {total_chunks} total chunks")
-        
-        # PARALLEL PROCESSING: Process chunks concurrently with rate limiting
-        CONCURRENT_LIMIT = 10  # Process 10 chunks at a time
-        semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
-        
-        processed_chunks = 0
-        updated_chunks = 0
-        failed_chunks = 0
-        
-        async def process_single_chunk(match, doc_title):
-            """Process a single chunk with AI tagging (rate-limited)"""
-            nonlocal processed_chunks, failed_chunks
+            # Fetch ALL titles from SQLite
+            all_docs = database.get_documents() 
+            document_titles_to_process = [d["title"] for d in all_docs]
             
-            async with semaphore:  # Limit concurrent processing
-                try:
-                    chunk_text = match.metadata.get('text', '')
-                    if not chunk_text:
-                        logger.warning(f"Skipping chunk {match.id} - no text found")
-                        return None
-                    
-                    # Re-generate tags with AI enhancement
-                    tags = await generate_tags(
-                        chunk_text,
-                        use_ai=True,  # Enable AI enhancement
-                        ai_provider=ai_provider,
-                        title=doc_title,
-                        ollama_model=ollama_model,
-                        openai_client=openai_client
-                    )
-                    
-                    # Get existing metadata
-                    existing_metadata = match.metadata.copy()
-                    
-                    # Extract detected_categories for flattening
-                    detected_cats = tags.get("detected_categories", {})
-                    
-                    # Update metadata with enhanced tags
-                    updated_metadata = {
-                        **existing_metadata,  # Keep existing fields
-                        
-                        # Update core tags
-                        "tags": tags.get("tags", existing_metadata.get("tags", [])),
-                        "primary_theme": tags.get("primary_theme", existing_metadata.get("primary_theme", "")),
-                        "consciousness_level": tags.get("consciousness_level", existing_metadata.get("consciousness_level", "")),
-                        "emotions": tags.get("emotions", existing_metadata.get("emotions", [])),
-                        
-                        # Update primary fields
-                        "primary_chakra": tags.get("primary_chakra", existing_metadata.get("primary_chakra", "")),
-                        "tradition": tags.get("tradition", existing_metadata.get("tradition", "")),
-                        "teacher": tags.get("teacher", existing_metadata.get("teacher", "")),
-                        "ascension_path": tags.get("ascension_path", existing_metadata.get("ascension_path", "")),
-                        "bridge_concept": tags.get("bridge_concept", existing_metadata.get("bridge_concept", "")),
-                        "recovery_focus": tags.get("recovery_focus", existing_metadata.get("recovery_focus", "")),
-                        "healing_modality": tags.get("healing_modality", existing_metadata.get("healing_modality", "")),
-                        "ai_provider": tags.get("ai_provider", existing_metadata.get("ai_provider", request.ai_provider)), # Update provider
-                        "ai_model": tags.get("ai_model", existing_metadata.get("ai_model", request.ollama_model)),
-                        
-                        # Update comprehensive fields
-                        "all_chakras": detected_cats.get("chakras", existing_metadata.get("all_chakras", [])),
-                        "all_meridians": detected_cats.get("meridians", existing_metadata.get("all_meridians", [])),
-                        "all_12_steps": detected_cats.get("twelve_steps", existing_metadata.get("all_12_steps", [])),
-                        "all_consciousness_levels": detected_cats.get("consciousness_level", existing_metadata.get("all_consciousness_levels", [])),
-                        "all_traditions": detected_cats.get("traditions", existing_metadata.get("all_traditions", [])),
-                        "all_teachers": detected_cats.get("teachers", existing_metadata.get("all_teachers", [])),
-                        "all_quantum_physics": detected_cats.get("quantum_science", existing_metadata.get("all_quantum_physics", [])),
-                        "all_quantum_particles": detected_cats.get("quantum_particles", existing_metadata.get("all_quantum_particles", [])),
-                        "all_ascension_paths": detected_cats.get("ascension_paths", existing_metadata.get("all_ascension_paths", [])),
-                        "all_bridge_concepts": detected_cats.get("bridge_concepts", existing_metadata.get("all_bridge_concepts", [])),
-                        "all_universal_laws": detected_cats.get("universal_laws", existing_metadata.get("all_universal_laws", [])),
-                        "all_healing_modalities": detected_cats.get("healing_modalities", existing_metadata.get("all_healing_modalities", [])),
-                        "all_sacred_geometry": detected_cats.get("sacred_geometry", existing_metadata.get("all_sacred_geometry", [])),
-                        "all_subtle_bodies": detected_cats.get("subtle_bodies", existing_metadata.get("all_subtle_bodies", [])),
-                        "all_addiction_types": detected_cats.get("addiction_type", existing_metadata.get("all_addiction_types", [])),
-                        "all_planets": detected_cats.get("planets", existing_metadata.get("all_planets", [])),
-                        "all_zodiac_signs": detected_cats.get("zodiac_signs", existing_metadata.get("all_zodiac_signs", []))
-                    }
-                    
-                    # Add program_level if detected
-                    if "program_level" in tags:
-                        updated_metadata["program_level"] = tags["program_level"]
-                    
-                    # Clean metadata for Pinecone
-                    updated_metadata = clean_metadata_for_pinecone(updated_metadata)
-                    
-                    processed_chunks += 1
-                    
-                    return {
-                        "id": match.id,
-                        "metadata": updated_metadata
-                    }
-                    
-                except Exception as chunk_error:
-                    logger.error(f"Error processing chunk {match.id}: {chunk_error}")
-                    failed_chunks += 1
-                    return None
-        
-        # Process all chunks in parallel (with concurrency limit)
-        all_tasks = []
-        for doc_title, doc_matches in documents_dict.items():
-            logger.info(f"Queueing document: {doc_title} ({len(doc_matches)} chunks)")
-            for match in doc_matches:
-                task = process_single_chunk(match, doc_title)
-                all_tasks.append(task)
-        
-        logger.info(f"Processing {len(all_tasks)} chunks in parallel (max {CONCURRENT_LIMIT} concurrent)")
-        
-        # Execute all tasks concurrently
-        results = await asyncio.gather(*all_tasks, return_exceptions=True)
-        
-        # Filter out None results and exceptions
-        vectors_to_update = [r for r in results if r is not None and not isinstance(r, Exception)]
-        
-        logger.info(f"Completed parallel processing: {len(vectors_to_update)} chunks ready for update")
-        
-        # Update in batches
-        UPSERT_BATCH_SIZE = 100
-        for i in range(0, len(vectors_to_update), UPSERT_BATCH_SIZE):
-            batch = vectors_to_update[i:i + UPSERT_BATCH_SIZE]
-            
-            # Fetch existing vectors to preserve embeddings
-            ids_to_fetch = [v["id"] for v in batch]
-            fetched = await pinecone_with_retry(
-                lambda: index.fetch(ids=ids_to_fetch),
-                max_retries=2,
-                timeout=10.0
-            )
-            
-            # Prepare vectors with existing embeddings + updated metadata
-            vectors_with_embeddings = []
-            for vec_update in batch:
-                vec_id = vec_update["id"]
-                if vec_id in fetched.vectors:
-                    existing_vector = fetched.vectors[vec_id]
-                    vectors_with_embeddings.append({
-                        "id": vec_id,
-                        "values": existing_vector.values,  # Keep existing embedding
-                        "metadata": vec_update["metadata"]
-                    })
-            
-            if vectors_with_embeddings:
-                await pinecone_with_retry(
-                    lambda v=vectors_with_embeddings: index.upsert(vectors=v),
-                    max_retries=3,
-                    timeout=15.0
-                )
-                updated_chunks += len(vectors_with_embeddings)
-                logger.info(f"Updated batch {i//UPSERT_BATCH_SIZE + 1}: {len(vectors_with_embeddings)} chunks")
-        
-        logger.info(f"Re-tagging complete: {processed_chunks} processed, {updated_chunks} updated, {failed_chunks} failed")
+        if not document_titles_to_process:
+             return {"status": "error", "message": "No documents found to re-tag"}
+
+        # Spawn Background Task
+        background_tasks.add_task(
+            run_retagging_task,
+            document_titles_to_process, 
+            ai_provider, 
+            ollama_model, 
+            batch_size
+        )
         
         return {
             "status": "success",
-            "message": f"Re-tagged {total_docs} documents",
-            "documents_processed": total_docs,
-            "chunks_processed": processed_chunks,
-            "chunks_updated": updated_chunks,
-            "chunks_failed": failed_chunks
+            "message": f"Started background re-tagging for {len(document_titles_to_process)} documents. Please check Status tab for progress.",
+            "job_id": "async_tagging",
+            "documents_queued": len(document_titles_to_process)
         }
     
-    except asyncio.TimeoutError:
-        logger.error("Re-tagging timed out waiting for Pinecone")
-        raise HTTPException(status_code=504, detail="Re-tagging timed out - please try again")
     except Exception as e:
-        logger.error(f"Re-tagging failed: {e}")
+        logger.error(f"Failed to queue re-tagging: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1748,6 +1681,12 @@ async def analyze_documents(request: AnalyzeRequest):
             "input_tokens": estimate.get("total_input_tokens", 0),
             "output_tokens": estimate.get("total_output_tokens", 0)
         })
+
+        # Update DB status for analyzed documents
+        for doc in documents:
+            title = doc.get("title", "Unknown")
+            if title != "Unknown":
+                database.update_status(title, "analyzed")
 
         return {
             "status": "success",

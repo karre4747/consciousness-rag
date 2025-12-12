@@ -1303,36 +1303,91 @@
             `).join('');
         }
 
-        // Load document list on page load
+        // Load document list (Master Function for Documents & Analysis Tabs)
         async function loadDocumentList() {
             try {
-                // Show loading state in both
-                const targets = ['docsList',
-                    'analysisDocsList'];
-
+                const targets = ['docsList', 'analysisDocsList'];
                 targets.forEach(id => {
                     const el = document.getElementById(id);
-                    if (el) el.innerHTML = '<div class="loading">Loading documents...</div>';
+                    if (el) el.innerHTML = '<div class="loading">Loading status...</div>';
                 });
 
-                const response = await fetch('/uploaded-documents');
+                // Call Unified Endpoint
+                const response = await fetch('/document-status');
                 const data = await response.json();
 
+                if (data.status === 'building') { // Legacy check
+                    targets.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.innerHTML = `<div class="loading">⏳ Scanning database... (${data.message || 'Please wait'})</div>`;
+                    });
+                    setTimeout(loadDocumentList, 2000);
+                    return;
+                }
+
+                // Handle Sync Status
+                const syncBtn = document.getElementById('syncDbBtn');
+                if (syncBtn) {
+                    if (data.sync_status === 'running') {
+                        syncBtn.innerHTML = '⏳ Restoring Data...';
+                        syncBtn.disabled = true;
+
+                        // Show banner if list is empty
+                        const docList = document.getElementById('docsList');
+                        if (data.total_documents === 0) {
+                            docList.innerHTML = `
+                                <div style="text-align:center; padding: 40px; background: #e8f4fc; border-radius: 8px; color: #2c3e50;">
+                                    <h3>⏳ Restoring Your Library</h3>
+                                    <p>We are rebuilding the index from the vector database. Your documents will appear here momentarily.</p>
+                                    <div class="loader" style="margin: 20px auto;"></div>
+                                </div>
+                            `;
+                        }
+
+                        // Auto-refresh fast while syncing
+                        setTimeout(loadDocumentList, 2000);
+                    } else {
+                        syncBtn.innerHTML = '🔄 Sync Database';
+                        syncBtn.disabled = false;
+
+                        // Handle truly empty state
+                        if (data.total_documents === 0) {
+                            const docList = document.getElementById('docsList');
+                            docList.innerHTML = `
+                                <div class="no-results" style="text-align:center; padding:40px;">
+                                    <p>No documents found.</p>
+                                    <button onclick="triggerSync()" class="secondary-btn" style="margin-top:10px;">Check Database Again</button>
+                                </div>
+                             `;
+                        }
+                    }
+                }
+
+                // Update Counts
                 const totalDocsEl = document.getElementById('totalDocs');
                 if (totalDocsEl) totalDocsEl.textContent = data.total_documents;
 
-                // Render to both lists
-                targets.forEach(id => {
-                    renderDocListToContainer(id, data.documents);
+                // 1. Documents Tab: Show ALL (Master View)
+                renderDocListToContainer('docsList', data.documents);
+
+                // 2. Analysis Tab: Show UNANALYZED Only (Todo View)
+                // Filter: Pass 3 Pending OR Pass 2 Pending (if implied)
+                // For now, let's filter those that don't have extensive AI generation
+                const unanalyzedDocs = data.documents.filter(doc => {
+                    // If Pass 3 is strictly "Pending", show it. 
+                    // Or if user wants to see things that "Need Analysis", we assume anything not explicitly marked Complete
+                    return doc.pass_3_status !== 'Complete';
                 });
 
-            }
+                renderDocListToContainer('analysisDocsList', unanalyzedDocs);
 
-            catch (error) {
+                // Update Analysis Header to reflect Todo count
+                const analysisHeader = document.querySelector('#analysis-tab h3');
+                if (analysisHeader) analysisHeader.innerHTML = `Select Documents to Analyze <span style="font-size:0.8em; color:#666">(${unanalyzedDocs.length} pending)</span>`;
+
+            } catch (error) {
                 console.error('Failed to load documents:', error);
-                const targets = ['docsList',
-                    'analysisDocsList'];
-
+                const targets = ['docsList', 'analysisDocsList'];
                 targets.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.innerHTML = '<div class="loading">❌ Failed to load documents</div>';
@@ -1755,21 +1810,58 @@
             const statusEl = document.getElementById('taggingStatus');
             const resultsEl = document.getElementById('taggingResults');
 
-            statusEl.textContent = 'Fetching document status...';
+            statusEl.textContent = 'Checking tagging status...';
             resultsEl.style.display = 'none';
 
             try {
-                const response = await fetch('/verify-tagging?limit=500'); // Fetch up to 500 for now
+                // Call Unified Endpoint
+                const response = await fetch('/document-status');
                 const data = await response.json();
+
+                if (data.status === 'building') {
+                    statusEl.innerHTML = `
+                        <div style="display: flex; gap: 20px; align-items: center; justify-content: center;">
+                            <span>⏳ <strong>Database Scan in Progress...</strong></span>
+                            <span style="color: #666;">This runs in the background. Please wait.</span>
+                        </div>
+                    `;
+                    // Auto-retry
+                    setTimeout(verifyTagging, 2000);
+                    return;
+                }
 
                 if (data.status !== 'success') {
                     statusEl.textContent = 'Verification failed.';
                     return;
                 }
 
-                statusEl.textContent = `Found ${data.total_documents} documents.`;
+                // FILTER: Show ONLY Untagged (Pass 1 or 2 Incomplete)
+                const todoDocs = data.documents.filter(doc => {
+                    const p1 = doc.pass_1_status === 'Pending';
+                    const p2 = doc.pass_2_status === 'Pending';
+                    return p1 || p2;
+                });
 
-                // Build Table
+                statusEl.innerHTML = `
+                    <div style="display: flex; gap: 20px; align-items: center;">
+                        <span>✅ <strong>${data.total_documents}</strong> Total Documents</span>
+                        <span style="color: #d63031;"><strong>${todoDocs.length}</strong> Require Tagging</span>
+                        <span style="color: #666;">•</span>
+                        <span style="color: #666;"><strong>${data.total_vectors.toLocaleString()}</strong> Vectors</span>
+                    </div>
+                `;
+
+                if (todoDocs.length === 0) {
+                    resultsEl.innerHTML = `
+                        <div class="no-results" style="background:#e3fcef; color:#00b894; border:1px solid #00b894;">
+                           🎉 All documents are tagged! Nothing to do here.
+                        </div>
+                     `;
+                    resultsEl.style.display = 'block';
+                    return;
+                }
+
+                // Build Table for Todo Items
                 let tableHTML = `
                     <div style="overflow-x: auto; margin-top: 15px;">
                         <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
@@ -1784,7 +1876,7 @@
                             <tbody>
                 `;
 
-                data.documents.forEach(doc => {
+                todoDocs.forEach(doc => {
                     // Status Badge Colors
                     const p1Color = doc.pass_1_status === 'Complete' ? '#00b894' : '#fab1a0';
                     const p1Badge = `<span style="padding: 3px 8px; border-radius: 4px; background: ${p1Color}; color: white; font-size: 0.8em;">${doc.pass_1_status}</span>`;
@@ -1818,7 +1910,7 @@
                 // Add legend/info
                 tableHTML += `
                     <div style="margin-top: 15px; font-size: 0.85em; color: #666; text-align: right;">
-                        Showing top ${data.documents.length} of ${data.total_documents} documents
+                        Showing ${todoDocs.length} documents requiring attention
                     </div>
                 `;
 

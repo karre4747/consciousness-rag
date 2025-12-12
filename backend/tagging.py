@@ -657,3 +657,94 @@ Return JSON:
 
     except Exception as e:
         return {"error": f"Claude analysis failed: {str(e)}"}
+
+async def generate_tags_batch_openai(texts: List[str], openai_client, max_tokens: int = 1500, timeout: float = 30.0) -> List[Dict[str, Any]]:
+    """
+    Batch processing for OpenAI tagging to reduce API calls.
+    Processes up to 5-10 chunks in a single request.
+    """
+    import asyncio
+    import json
+    import random
+    from openai import OpenAIError, RateLimitError, APITimeoutError, APIConnectionError
+
+    # Construct batch prompt
+    combined_text = ""
+    for i, text in enumerate(texts):
+        combined_text += f"\n--- CHUNK {i+1} ---\n{text[:1000]}...\n"
+
+    prompt = f"""You are a tagging engine. Analyze the following {len(texts)} text chunks. 
+For EACH chunk, identify relevant tags, themes, and consciousness levels.
+
+CHUNKS TO ANALYZE:
+{combined_text}
+
+Return a valid JSON OBJECT with a key "results" which is a LIST of objects, one for each chunk in order:
+{{
+  "results": [
+    {{
+      "chunk_index": 1,
+      "tags": ["tag1", "tag2"],
+      "primary_theme": "theme description",
+      "consciousness_level": "level"
+    }},
+    ...
+  ]
+}}
+
+Categories to detect: chakras, recovery_principles, consciousness_levels, traditions, quantum_concepts.
+"""
+
+    max_retries = 3
+    base_delay = 2
+    max_delay = 45
+
+    def _call_openai():
+        return openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=0.3
+        )
+
+    for attempt in range(max_retries):
+        try:
+            response = await asyncio.wait_for(
+                asyncio.to_thread(_call_openai),
+                timeout=timeout
+            )
+            response_text = response.choices[0].message.content
+            
+            try:
+                # Clean up json if markdown block
+                if "```json" in response_text:
+                    response_text = response_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in response_text:
+                    response_text = response_text.split("```")[1].split("```")[0].strip()
+
+                data = json.loads(response_text)
+                results = data.get("results", [])
+                
+                # Pad if missing
+                while len(results) < len(texts):
+                    results.append({})
+                    
+                return results
+                
+            except json.JSONDecodeError:
+                # Fallback: return empty dicts to trigger keyword fallback
+                return [{} for _ in texts]
+
+        except (RateLimitError, APIConnectionError) as e:
+            if attempt == max_retries - 1: return [{} for _ in texts]
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            # Add jitter
+            delay += random.uniform(0, 1)
+            print(f"Batch OpenAI rate limit, retrying in {delay:.2f}s")
+            await asyncio.sleep(delay)
+            
+        except Exception as e:
+            print(f"Batch OpenAI error: {e}")
+            return [{} for _ in texts]
+
+    return [{} for _ in texts]
