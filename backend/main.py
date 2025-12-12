@@ -979,11 +979,11 @@ async def check_duplicate(request: DuplicateCheckRequest):
 
 
 @app.get("/verify-tagging")
-async def verify_tagging(limit: int = 500):
+async def verify_tagging(limit: int = 50, offset: int = 0):
     """
     Verify which tagging passes have been applied to documents.
     Returns detailed list for frontend table.
-    Uses list+fetch to ensure ALL documents are scanned.
+    Uses list+fetch with TRUE PAGINATION to ensure speed on large datasets (44k+ vectors).
     """
     try:
         # 1. Get total stats
@@ -1002,8 +1002,9 @@ async def verify_tagging(limit: int = 500):
                 "documents": []
             }
 
-        # 2. List ALL vector IDs (pagination handled by generator)
-        # This is strictly better than query(top_k=10000)
+        # 2. List ALL vector IDs (fast, just IDs)
+        # We need all IDs to sort/paginate properly if we want a stable list
+        # For 44k IDs, this should take ~1-2s
         all_vector_ids = []
         try:
             for ids in index.list(): # Fetch all IDs
@@ -1011,69 +1012,47 @@ async def verify_tagging(limit: int = 500):
             logger.info(f"Verify Tagging: Retrieved {len(all_vector_ids)} vector IDs")
         except Exception as list_err:
              logger.warning(f"Verify Tagging: index.list() failed ({list_err}), falling back to query")
-             # Fallback to query if list fails
-             query_vector = [0.0] * PINECONE_DIMENSION
-             results = await pinecone_with_retry(
-                lambda: index.query(
-                    vector=query_vector,
-                    top_k=10000,
-                    include_metadata=True
-                ),
-                max_retries=2,
-                timeout=30.0
-             )
-             # ... handle fallback similarly ... 
-             # For brevity in this replacement, we'll assume list works or return error if completely broken
-             # But let's support a simple query fallback for safety
-             all_matches = results.matches
-             # (See below for unified processing)
+             return {
+                 "status": "error",
+                 "message": "Failed to list documents. Database may be busy."
+             }
+        
+        # 3. Apply Pagination (Slice IDs *before* fetching)
+        # Verify offset/limit are within bounds
+        offset = max(0, offset)
+        limit = max(1, min(1000, limit)) # Cap max limit to 1000
+        
+        paginated_ids = all_vector_ids[offset : offset + limit]
+        
+        if not paginated_ids:
+             return {
+                "status": "success",
+                "total_documents": len(all_vector_ids), # Total chunks, roughly maps to docs
+                "documents": []
+            }
 
-        # 3. Process vectors (Fetch metadata if we used list(), or use matches if we used query())
+        # 4. Fetch metadata ONLY for the paginated slice
         documents_dict = {}
         
-        if all_vector_ids:
-            # We have IDs from list(), need to fetch metadata in batches
-            # REDUCED BATCH SIZE to avoid 414 Request-URI Too Large error
-            FETCH_BATCH_SIZE = 200 
-            CONCURRENT_LIMIT = 10  # Increased concurrency to compensate for smaller batches
-            semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
+        # We have IDs from pagination slice, fetch metadata
+        # No need for complex semaphore here as we are only fetching one batch (limit=50-500)
+        try:
+            fetched = await pinecone_with_retry(
+                lambda: index.fetch(ids=paginated_ids),
+                max_retries=2,
+                timeout=15.0
+            )
             
-            async def fetch_batch_safe(ids):
-                """Helper to fetch with semaphore and safe variable capture"""
-                async with semaphore:
-                    return await pinecone_with_retry(
-                        lambda: index.fetch(ids=ids),
-                        max_retries=3,
-                        timeout=45.0
-                    )
-            
-            # Create tasks for all batches
-            tasks = []
-            for i in range(0, len(all_vector_ids), FETCH_BATCH_SIZE):
-                batch_ids = all_vector_ids[i:i + FETCH_BATCH_SIZE]
-                # Pass batch_ids directly to the async helper function
-                # This guarantees value capture, avoiding the closure bug
-                tasks.append(fetch_batch_safe(batch_ids))
+            for vec_id, vector_data in fetched.vectors.items():
+                process_vector_metadata(vector_data.metadata, documents_dict)
                 
-            logger.info(f"Verify Tagging: Fetching metadata for {len(all_vector_ids)} chunks in {len(tasks)} batches...")
+        except Exception as fetch_err:
+            logger.error(f"Failed to fetch batch metadata: {fetch_err}")
+            # Continue with empty dict if fail, will return empty list
+            pass
             
-            # Execute parallel fetches
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Process results
-            for res in results:
-                if isinstance(res, Exception):
-                    logger.error(f"Batch fetch failed: {res}")
-                    continue
-                    
-                if hasattr(res, 'vectors'):
-                    for vec_id, vector_data in res.vectors.items():
-                        process_vector_metadata(vector_data.metadata, documents_dict)
-                    
-        elif 'all_matches' in locals() and all_matches:
-             # Fallback path
-             for match in all_matches:
-                 process_vector_metadata(match.metadata, documents_dict)
+        if 'all_matches' in locals() and all_matches:
+             # Fallback path if we ever add query fallback again
              for match in all_matches:
                  process_vector_metadata(match.metadata, documents_dict)
 
