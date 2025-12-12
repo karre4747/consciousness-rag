@@ -1010,9 +1010,27 @@ async def verify_tagging(limit: int = 50, offset: int = 0):
         # For 44k IDs, this should take ~1-2s
         all_vector_ids = []
         try:
-            for ids in index.list(): # Fetch all IDs
-                all_vector_ids.extend(ids)
-            logger.info(f"Verify Tagging: Retrieved {len(all_vector_ids)} vector IDs")
+            # Probe namespaces: explicit empty string, then None (default), then literal __default__
+            # This handles inconsistencies in how Pinecone clients treat the default namespace
+            for ns in ["", None]:
+                ids_found = []
+                try:
+                    # Note: namespace=None tells client to use its default
+                    iterator = index.list(namespace=ns) if ns is not None else index.list()
+                    for ids in iterator:
+                        ids_found.extend(ids)
+                    
+                    if ids_found:
+                        all_vector_ids = ids_found
+                        logger.info(f"Verify Tagging: Found {len(all_vector_ids)} IDs in namespace '{ns}'")
+                        break # Found them!
+                except Exception as ns_err:
+                    logger.warning(f"Failed to list namespace '{ns}': {ns_err}")
+                    continue
+            
+            if not all_vector_ids:
+                 logger.warning("Verify Tagging: No IDs found in any probed namespace")
+                 
         except Exception as list_err:
              logger.warning(f"Verify Tagging: index.list() failed ({list_err}), falling back to query")
              return {
