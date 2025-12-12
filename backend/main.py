@@ -1012,18 +1012,33 @@ async def verify_tagging(limit: int = 50, offset: int = 0):
         try:
             # Probe namespaces: explicit empty string, then None (default), then literal __default__
             # This handles inconsistencies in how Pinecone clients treat the default namespace
-            for ns in ["", None]:
-                ids_found = []
+            # Determine namespaces to probe using stats (if available) or fallback defaults
+            namespaces_to_probe = ["", None] # Always check default/empty
+            
+            # Use dynamic namespaces from stats if valid
+            if hasattr(stats, 'namespaces') and isinstance(stats.namespaces, dict):
+                 # Add any specific namespaces found in stats
+                 # Pinecone's client keys might be '' or actual names
+                 for ns_key in stats.namespaces.keys():
+                     if ns_key == '__default__':
+                         continue # Handled by None/"" typically, but we trust the loop
+                     if ns_key not in namespaces_to_probe:
+                         namespaces_to_probe.append(ns_key)
+
+            logger.info(f"Verify Tagging: Probing namespaces: {namespaces_to_probe}")
+
+            for ns in namespaces_to_probe:
                 try:
                     # Note: namespace=None tells client to use its default
                     iterator = index.list(namespace=ns) if ns is not None else index.list()
+                    count_in_ns = 0
                     for ids in iterator:
-                        ids_found.extend(ids)
+                        all_vector_ids.extend(ids)
+                        count_in_ns += len(ids)
                     
-                    if ids_found:
-                        all_vector_ids = ids_found
-                        logger.info(f"Verify Tagging: Found {len(all_vector_ids)} IDs in namespace '{ns}'")
-                        break # Found them!
+                    if count_in_ns > 0:
+                        logger.info(f"Verify Tagging: Found {count_in_ns} IDs in namespace '{ns}'")
+                        
                 except Exception as ns_err:
                     logger.warning(f"Failed to list namespace '{ns}': {ns_err}")
                     continue
