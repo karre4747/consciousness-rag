@@ -794,14 +794,17 @@ async def get_stats():
         }
         
         # Try to add namespaces count if available
+        # Try to add namespaces count if available
         if hasattr(stats, 'namespaces'):
             try:
+                # Return the actual namespaces dict to debug where vectors are hiding
                 if isinstance(stats.namespaces, dict):
-                    response["namespaces_count"] = len(stats.namespaces)
+                    # Convert to simple dict if it's a specific Pinecone object
+                    response["namespaces"] = {k: v.vector_count for k, v in stats.namespaces.items()}
                 elif stats.namespaces:
-                    response["namespaces_count"] = 1  # At least one namespace exists
-            except:
-                pass  # Skip if we can't serialize it
+                    response["namespaces_raw"] = str(stats.namespaces)
+            except Exception as e:
+                response["namespaces_error"] = str(e)
         
         return response
     except asyncio.TimeoutError:
