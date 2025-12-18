@@ -2474,8 +2474,8 @@
         });
 
         async function retagSingleDocument(title) {
-            const provider = document.getElementById('aiProvider').value || 'ollama';
-            const model = document.getElementById('ollamaModel').value || 'llama3.1';
+            const providerSelect = document.getElementById('aiProvider'); const provider = providerSelect ? providerSelect.value : 'openai';
+            const modelSelect = document.getElementById('ollamaModel'); const model = modelSelect ? modelSelect.value : 'llama3.1';
 
             const msg = `Upgrade "${title}" using ${provider.toUpperCase()}?`;
             if (!confirm(msg)) return;
