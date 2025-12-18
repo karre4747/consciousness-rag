@@ -512,7 +512,7 @@
 
         .doc-item {
             display: grid;
-            grid-template-columns: 40px 3fr 1fr 100px;
+            grid-template-columns: 40px 3fr 1fr 140px;
             gap: 15px;
             padding: 15px;
             border-bottom: 1px solid #eee;
@@ -781,7 +781,50 @@
             font-size: 1.1em;
         }
 
+        /* Document Actions */
+        .doc-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .delete-doc-btn {
+            background: #ff7675;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.2s;
+        }
+
+        .delete-doc-btn:hover {
+            background: #d63031;
+        }
+
+        .upgrade-ai-btn {
+            background: #fdcb6e;
+            color: #2d3436;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            font-weight: bold;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .upgrade-ai-btn:hover {
+            background: #e17055;
+            color: white;
+            transform: translateY(-1px);
+        }
+
         /* Answer Container */
+
         .answer-container {
             display: none;
             background: white;
@@ -1337,7 +1380,7 @@
             }
 
             // Headers for clarity
-            const headerGrid = '40px 3fr 1fr 1fr 1.5fr 1fr 100px';
+            const headerGrid = '40px 3fr 1fr 1fr 1.5fr 1fr 140px';
             const headerHTML = `
                 <div class="doc-item header-row" style="background: #eee; font-weight: 700; color: #555; position: sticky; top: 0; z-index: 10; grid-template-columns: ${headerGrid};">
                     <div><input type="checkbox" id="selectAll-${containerId}" onchange="toggleSelectAll('${containerId}', this.checked)"></div>
@@ -1376,7 +1419,7 @@
                 }
 
                 return `
-                <div class="doc-item" data-title="${escapeHtml(doc.title)}" style="grid-template-columns: 40px 3fr 1fr 1fr 1.5fr 1fr 100px;">
+                <div class="doc-item" data-title="${escapeHtml(doc.title)}" style="grid-template-columns: 40px 3fr 1fr 1fr 1.5fr 1fr 140px;">
                     <div><input type="checkbox" class="doc-select" value="${escapeHtml(doc.title)}"></div>
                     <div class="doc-title">${escapeHtml(doc.title)}</div>
                     <div class="doc-chunks">${doc.chunk_count}</div>
