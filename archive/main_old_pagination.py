@@ -301,13 +301,22 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVE
 
 
 def generate_embedding(text: str) -> List[float]:
-    """Generate embedding using OpenAI"""
+    """Generate embedding using OpenAI with dimension validation"""
     try:
         response = openai_client.embeddings.create(
             model=EMBEDDING_MODEL,
             input=text
         )
-        return response.data[0].embedding
+        embedding = response.data[0].embedding
+
+        # Validate embedding dimensions match Pinecone configuration
+        if len(embedding) != PINECONE_DIMENSION:
+            raise ValueError(
+                f"Embedding dimension mismatch: {EMBEDDING_MODEL} returned {len(embedding)}-dimensional vector, "
+                f"but PINECONE_DIMENSION is {PINECONE_DIMENSION}. Check your .env configuration."
+            )
+
+        return embedding
     except Exception as e:
         logger.error(f"Embedding generation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Embedding generation failed: {str(e)}")
