@@ -4,12 +4,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Evolve Consciousness Engine - Upload</title>
+    <title>Evolve Consciousness Engine</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+        }
+
+        < !-- ... styles ... -->.header {
+            background: linear-gradient(135deg, var(--deep-purple) 0%, var(--royal-purple) 100%);
+            color: white;
+            padding: 30px 40px;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--bright-purple);
+            margin-bottom: 10px;
+            font-size: 2.2em;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         }
 
         :root {
@@ -356,22 +370,18 @@
             border: 2px solid var(--royal-purple);
             border-radius: 15px;
             cursor: pointer;
-            font-size: 0.85em;
-            font-weight: 600;
-            transition: all 0.2s ease;
         }
 
-        .small-btn:hover {
-            background: var(--fluorescent-purple);
-            border-color: var(--fluorescent-purple);
-            color: white;
-            transform: translateY(-1px);
+        .icon-btn.analyze:hover {
+            background-color: #e3fcef;
+            color: #00b894;
         }
 
         .spending-details {
             text-align: center;
             margin: 20px 0;
             color: #555;
+            font-size: 0.95em;
         }
 
         .spending-details p {
@@ -989,6 +999,14 @@
                     <button class="analysis-btn" onclick="retagAllDocumentsOpenAI()"
                         style="background: var(--deep-purple); border-color: var(--deep-purple);">Re-tag All with
                         OpenAI</button>
+                    <!-- NEW SELECTIVE BUTTONS -->
+                    <div style="flex-basis: 100%; height: 0;"></div> <!-- Line Break -->
+                    <button class="analysis-btn" onclick="retagSelectedDocuments('ollama')"
+                        style="background: white; color: var(--royal-purple); border-color: var(--royal-purple);">Re-tag
+                        Selected (Ollama)</button>
+                    <button class="analysis-btn" onclick="retagSelectedDocuments('openai')"
+                        style="background: white; color: var(--deep-purple); border-color: var(--deep-purple);">Re-tag
+                        Selected (OpenAI)</button>
                 </div>
                 <div class="analysis-status" id="taggingStatus">Click "Verify Tagging Status" to check your documents.
                 </div>
@@ -1029,18 +1047,37 @@
         <!-- Documents Tab -->
         <div id="documents-tab" class="tab-content">
             <!-- Uploaded Documents List -->
+            <!-- Uploaded Documents List -->
+            <!-- Uploaded Documents List -->
+            <!-- Uploaded Documents List -->
+            <!-- Uploaded Documents List -->
             <div class="uploaded-docs-section" id="uploadedDocsSection">
-                <h3>📚 Uploaded Documents</h3>
+                <h3 style="color: #d63031;">🚧 Active Workspace</h3>
+                <p style="text-align:center; color:#666; margin-bottom: 20px;">Documents currently being processed or
+                    waiting for analysis</p>
                 <div class="docs-controls">
                     <button class="secondary-btn" onclick="refreshDocumentList()">🔄 Refresh List </button>
                     <input type="text" id="docSearch" placeholder="🔍 Search documents..." onkeyup="filterDocuments()"
                         style="padding: 10px; border-radius: 5px; border: 2px solid var(--royal-purple); width: 300px; font-size: 1em; color: var(--deep-purple);">
                 </div>
-                <div class="docs-stats">
-                    <p>📊 <strong id="totalDocs">0</strong> documents in database</p>
-                </div>
+                <!-- Active Docs List -->
                 <div class="docs-list" id="docsList">
                     <div class="loading">Loading documents...</div>
+                </div>
+            </div>
+
+            <!-- COMPLETED Documents List -->
+            <div class="uploaded-docs-section" id="completedDocsSection"
+                style="background: linear-gradient(135deg, #f0fff4 0%, #ffffff 100%); border: 2px solid #20C997;">
+                <h3 style="color: #157347;">✅ Completed Library</h3>
+                <p style="text-align:center; color:#666; margin-bottom: 20px;">Fully processed documents (Uploaded •
+                    Tagged • Analyzed)</p>
+                <!-- Reuse controls if needed or simplify -->
+                <div class="docs-stats">
+                    <p>📊 <strong id="totalDocs">0</strong> total documents in database</p>
+                </div>
+                <div class="docs-list" id="completedDocsList">
+                    <div class="loading">Loading completed documents...</div>
                 </div>
             </div>
         </div>
@@ -1287,33 +1324,83 @@
             if (!container) return; // specific container might not exist
 
             if (documents.length === 0) {
-                container.innerHTML = '<div class="no-results">📭 No documents uploaded yet</div>';
+                if (containerId === 'completedDocsList') {
+                    container.innerHTML = '<div class="no-results" style="padding:40px; color:#999;">No completed documents yet.<br><small>Run Analysis on tagged documents to move them here.</small></div>';
+                } else {
+                    container.innerHTML = '<div class="no-results">📭 No active documents. Upload some!</div>';
+                }
                 return;
             }
 
-            container.innerHTML = documents.map(doc => `
-                <div class="doc-item" data-title="${escapeHtml(doc.title)}">
+            // Headers for clarity
+            const headerHTML = `
+                <div class="doc-item header-row" style="background: #eee; font-weight: 700; color: #555; position: sticky; top: 0; z-index: 10;">
+                    <div></div>
+                    <div>Title</div>
+                    <div style="text-align:center">Chunks</div>
+                    <div style="text-align:center">1. Upload</div>
+                    <div style="text-align:center">2. Tagging</div>
+                    <div style="text-align:center">3. Analysis</div>
+                    <div style="text-align:right">Actions</div>
+                </div>
+            `;
+
+            const rowsHTML = documents.map(doc => {
+                // 1. Upload Status (Always Success if here)
+                const uploadStatus = `<span title="Uploaded" style="cursor:help">✅</span>`;
+
+                // 2. Tagging Status
+                let tagStatus = `<span style="color:#bdc3c7" title="Pending">⚪</span>`;
+                let tagTitle = "Pending";
+                if (doc.pass_2_status && doc.pass_2_status !== 'Pending') {
+                    // It has some provider info
+                    const provider = doc.pass_2_status.split(' ')[0]; // Simple name
+                    let icon = '🤖';
+                    if (provider.toLowerCase().includes('ollama')) icon = '🦙';
+                    if (provider.toLowerCase().includes('openai')) icon = '🧠';
+
+                    tagStatus = `<span style="font-size:0.9em; background:#e3fcef; color:#00b894; padding:2px 6px; border-radius:4px;" title="${doc.pass_2_status}">${icon} ${provider}</span>`;
+                } else if (doc.pass_1_status === 'Complete') {
+                    tagStatus = `<span style="font-size:0.9em; background:#dfe6e9; color:#636e72; padding:2px 6px; border-radius:4px;">🔑 Keywords</span>`;
+                }
+
+                // 3. Analysis Status
+                let analyzeStatus = `<span style="color:#bdc3c7" title="Not Analyzed">⚪</span>`;
+                if (doc.pass_3_status === 'Complete') {
+                    analyzeStatus = `<span style="font-size:0.9em; background:#a29bfe; color:#FFF; padding:2px 6px; border-radius:4px;" title="Analyzed by Claude">✨ Claude</span>`;
+                }
+
+                return `
+                <div class="doc-item" data-title="${escapeHtml(doc.title)}" style="grid-template-columns: 40px 3fr 1fr 1fr 1.5fr 1fr 100px;">
                     <div><input type="checkbox" class="doc-select" value="${escapeHtml(doc.title)}"></div>
                     <div class="doc-title">${escapeHtml(doc.title)}</div>
-                    <div class="doc-chunks">${doc.chunk_count} chunks</div>
+                    <div class="doc-chunks">${doc.chunk_count}</div>
+                    
+                    <!-- Status Columns -->
+                    <div style="text-align:center;">${uploadStatus}</div>
+                    <div style="text-align:center;">${tagStatus}</div>
+                    <div style="text-align:center;">${analyzeStatus}</div>
+
                     <div class="doc-actions">
-                        ${containerId === 'docsList' ? `<button onclick="deleteDocument('${escapeHtml(doc.title).replace(/'/g, "\\'")}')">\ud83d\uddd1\ufe0f Delete</button>` : ''}
+                        ${containerId === 'docsList' || containerId === 'completedDocsList' ? `<button onclick="deleteDocument('${escapeHtml(doc.title).replace(/'/g, "\\'")}')">\ud83d\uddd1\ufe0f</button>` : ''}
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
+
+            container.innerHTML = headerHTML + rowsHTML;
         }
 
         // Load document list (Master Function for Documents & Analysis Tabs)
         async function loadDocumentList() {
             try {
-                const targets = ['docsList', 'analysisDocsList'];
+                const targets = ['docsList', 'analysisDocsList', 'completedDocsList'];
                 targets.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.innerHTML = '<div class="loading">Loading status...</div>';
                 });
 
                 // Call Unified Endpoint
-                const response = await fetch('/document-status');
+                const response = await fetch(`/document-status?t=${new Date().getTime()}`);
                 const data = await response.json();
 
                 if (data.status === 'building') { // Legacy check
@@ -1367,8 +1454,13 @@
                 const totalDocsEl = document.getElementById('totalDocs');
                 if (totalDocsEl) totalDocsEl.textContent = data.total_documents;
 
-                // 1. Documents Tab: Show ALL (Master View)
-                renderDocListToContainer('docsList', data.documents);
+                // Split into Active and Completed
+                const completedDocs = data.documents.filter(doc => doc.pass_3_status === 'Complete');
+                const activeDocs = data.documents.filter(doc => doc.pass_3_status !== 'Complete');
+
+                // 1. Documents Tab: Render both lists
+                renderDocListToContainer('docsList', activeDocs);
+                renderDocListToContainer('completedDocsList', completedDocs);
 
                 // 2. Analysis Tab: Show UNANALYZED Only (Todo View)
                 // Filter: Pass 3 Pending OR Pass 2 Pending (if implied)
@@ -1379,15 +1471,21 @@
                     return doc.pass_3_status !== 'Complete';
                 });
 
+                // Analysis tab usually uses a simpler list, but our new renderer handles it gracefully
+                // We might need to handle the header structure if it expects the old grid
+                // Actually, renderDocListToContainer adds a header row now. 
+                // For the "Select Documents for Analysis" small list, we might want a Compact version.
+                // Let's rely on standard rendering for now, or add a 'compact' flag later if needed.
+                // Re-using the same renderer for analysis list
                 renderDocListToContainer('analysisDocsList', unanalyzedDocs);
 
                 // Update Analysis Header to reflect Todo count
                 const analysisHeader = document.querySelector('#analysis-tab h3');
-                if (analysisHeader) analysisHeader.innerHTML = `Select Documents to Analyze <span style="font-size:0.8em; color:#666">(${unanalyzedDocs.length} pending)</span>`;
+                if (analysisHeader) analysisHeader.innerHTML = `Select Documents to Analyze (Deep Scan) <span style="font-size:0.8em; color:#666">(${unanalyzedDocs.length} pending)</span>`;
 
             } catch (error) {
                 console.error('Failed to load documents:', error);
-                const targets = ['docsList', 'analysisDocsList'];
+                const targets = ['docsList', 'analysisDocsList', 'completedDocsList'];
                 targets.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.innerHTML = '<div class="loading">❌ Failed to load documents</div>';
@@ -1404,6 +1502,7 @@
         // Filter function for standard doc list
         function filterDocuments() {
             filterList('docSearch', 'docsList');
+            filterList('docSearch', 'completedDocsList'); // Search both lists
         }
 
         // Filter function for analysis doc list
@@ -1755,9 +1854,15 @@
                     return;
                 }
 
-                analysisStatus.textContent = `Analyzed ${data.documents_analyzed} documents. Rendering results...`;
+                const docLabel = data.documents_analyzed === 1 ? 'document' : 'documents';
+                const msg = `Analyzed ${data.documents_analyzed} ${docLabel}. Rendering results...`;
+                analysisStatus.innerHTML = `<div class="status-success"><strong>${msg}</strong></div>`;
+
                 displayAnalysisResults(data);
                 await loadSpendingDashboard();
+
+                // REFRESH LIST to remove analyzed docs from the Todo list
+                setTimeout(loadDocumentList, 1000);
             }
 
             catch (error) {
@@ -1774,33 +1879,46 @@
                 return;
             }
 
-            const rendered = result.batches.map((batch, idx) => {
-                const analysis = batch.analysis || {}
+            container.style.display = 'block';
+            container.innerHTML = '';
 
-                    ;
+            result.batches.forEach((batch, idx) => {
+                const analysis = batch.analysis || {};
 
                 const themes = (analysis.cross_document_themes || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
-
                 const patterns = (analysis.consciousness_patterns || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
-
                 const synth = (analysis.synthesis_opportunities || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
-
                 const connections = (analysis.suggested_connections || []).map(c => `<li>${escapeHtml(c.doc_id || '')} → ${escapeHtml(c.relates_to || '')}: ${escapeHtml(c.connection || '')}</li>`).join('') || '<li>None</li>';
 
-                return `
-                    <div style="border-bottom:1px solid #eee; padding:10px 0;">
-                        <h4>Batch ${idx + 1} (${batch.documents_analyzed} docs)</h4>
-                        <div><strong>Themes:</strong><ul>${themes}</ul></div>
-                        <div><strong>Patterns:</strong><ul>${patterns}</ul></div>
-                        <div><strong>Synthesis:</strong><ul>${synth}</ul></div>
-                        <div><strong>Connections:</strong><ul>${connections}</ul></div>
+                const cardHTML = `
+                    <div style="border:1px solid #eee; border-radius:8px; padding:15px; margin-bottom:15px; background:white;">
+                        <h4 style="margin-top:0;">Batch Analysis (${batch.documents_analyzed} docs)</h4>
+                        
+                        <div style="margin-bottom:10px;">
+                            <strong>Themes:</strong>
+                            <ul style="margin:5px 0; padding-left:20px;">${themes}</ul>
+                        </div>
+                        
+                        <div style="margin-bottom:10px;">
+                            <strong>Patterns:</strong>
+                            <ul style="margin:5px 0; padding-left:20px;">${patterns}</ul>
+                        </div>
+                        
+                        <div style="margin-bottom:10px;">
+                            <strong>Synthesis:</strong>
+                            <ul style="margin:5px 0; padding-left:20px;">${synth}</ul>
+                        </div>
+                        
+                        <div>
+                            <strong>Connections:</strong>
+                            <ul style="margin:5px 0; padding-left:20px;">${connections}</ul>
+                        </div>
                     </div>
                 `;
-            }).join('');
-
-            container.innerHTML = rendered;
-            container.style.display = 'block';
+                container.innerHTML += cardHTML;
+            });
         }
+
 
         // ========================================
         // TAGGING MANAGEMENT FUNCTIONS
@@ -1815,16 +1933,16 @@
 
             try {
                 // Call Unified Endpoint
-                const response = await fetch('/document-status');
+                const response = await fetch(`/document-status?t=${new Date().getTime()}`);
                 const data = await response.json();
 
                 if (data.status === 'building') {
                     statusEl.innerHTML = `
-                        <div style="display: flex; gap: 20px; align-items: center; justify-content: center;">
+            < div style = "display: flex; gap: 20px; align-items: center; justify-content: center;" >
                             <span>⏳ <strong>Database Scan in Progress...</strong></span>
                             <span style="color: #666;">This runs in the background. Please wait.</span>
-                        </div>
-                    `;
+                        </div >
+            `;
                     // Auto-retry
                     setTimeout(verifyTagging, 2000);
                     return;
@@ -1835,46 +1953,48 @@
                     return;
                 }
 
-                // FILTER: Show ONLY Untagged (Pass 1 or 2 Incomplete)
+                // FILTER: Show ONLY Untagged (Pass 1 or 2 Incomplete) AND Processing
                 const todoDocs = data.documents.filter(doc => {
                     const p1 = doc.pass_1_status === 'Pending';
                     const p2 = doc.pass_2_status === 'Pending';
-                    return p1 || p2;
+                    const processing = doc.pass_2_status.toLowerCase().includes('processing');
+                    return p1 || p2 || processing;
                 });
 
                 statusEl.innerHTML = `
-                    <div style="display: flex; gap: 20px; align-items: center;">
+            < div style = "display: flex; gap: 20px; align-items: center;" >
                         <span>✅ <strong>${data.total_documents}</strong> Total Documents</span>
-                        <span style="color: #d63031;"><strong>${todoDocs.length}</strong> Require Tagging</span>
+                        <span style="color: #d63031;"><strong>${todoDocs.length}</strong> Require Attention</span>
                         <span style="color: #666;">•</span>
                         <span style="color: #666;"><strong>${data.total_vectors.toLocaleString()}</strong> Vectors</span>
-                    </div>
-                `;
+                    </div >
+            `;
 
                 if (todoDocs.length === 0) {
                     resultsEl.innerHTML = `
-                        <div class="no-results" style="background:#e3fcef; color:#00b894; border:1px solid #00b894;">
+            < div class="no-results" style = "background:#e3fcef; color:#00b894; border:1px solid #00b894;" >
                            🎉 All documents are tagged! Nothing to do here.
-                        </div>
-                     `;
+                        </div >
+            `;
                     resultsEl.style.display = 'block';
                     return;
                 }
 
                 // Build Table for Todo Items
                 let tableHTML = `
-                    <div style="overflow-x: auto; margin-top: 15px;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
-                            <thead>
-                                <tr style="background: #f8f9fa; text-align: left;">
-                                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">Document Title</th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">Chunks</th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">Pass 1 (Keywords)</th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">Pass 2 (AI Status)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
+            < div style = "overflow-x: auto; margin-top: 15px;" >
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                    <thead>
+                        <tr style="background: #f8f9fa; text-align: left;">
+                            <th style="padding: 10px; border-bottom: 2px solid #ddd; width: 40px;"><input type="checkbox" onclick="toggleAllRetag(this)"></th>
+                            <th style="padding: 10px; border-bottom: 2px solid #ddd;">Document Title</th>
+                            <th style="padding: 10px; border-bottom: 2px solid #ddd;">Chunks</th>
+                            <th style="padding: 10px; border-bottom: 2px solid #ddd;">Pass 1 (Keywords)</th>
+                            <th style="padding: 10px; border-bottom: 2px solid #ddd;">Pass 2 (AI Status)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        `;
 
                 todoDocs.forEach(doc => {
                     // Status Badge Colors
@@ -1891,28 +2011,33 @@
                     } else if (p2Text.includes('Partial')) {
                         p2Color = '#f39c12'; // Orange
                         p2TextColor = 'white';
+                    } else if (p2Text.toLowerCase().includes('processing')) {
+                        p2Color = '#6c5ce7'; // Purple for Processing
+                        p2TextColor = 'white';
+                        p2Text = '⏳ ' + p2Text;
                     }
 
                     const p2Badge = `<span style="padding: 3px 8px; border-radius: 4px; background: ${p2Color}; color: ${p2TextColor}; font-size: 0.8em;">${p2Text}</span>`;
 
                     tableHTML += `
                         <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 10px; text-align: center;"><input type="checkbox" class="retag-select" value="${escapeHtml(doc.title)}"></td>
                             <td style="padding: 10px;"><strong>${escapeHtml(doc.title)}</strong></td>
                             <td style="padding: 10px;">${doc.chunk_count}</td>
                             <td style="padding: 10px;">${p1Badge}</td>
                             <td style="padding: 10px;">${p2Badge}</td>
                         </tr>
-                    `;
+                        `;
                 });
 
-                tableHTML += `</tbody></table></div>`;
+                tableHTML += `</tbody></table></div > `;
 
                 // Add legend/info
                 tableHTML += `
-                    <div style="margin-top: 15px; font-size: 0.85em; color: #666; text-align: right;">
-                        Showing ${todoDocs.length} documents requiring attention
-                    </div>
-                `;
+                            < div style = "margin-top: 15px; font-size: 0.85em; color: #666; text-align: right;" >
+                                Showing ${todoDocs.length} documents requiring attention
+                    </div >
+            `;
 
                 resultsEl.innerHTML = tableHTML;
                 resultsEl.style.display = 'block';
@@ -1951,13 +2076,13 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    statusEl.textContent = `✅ Successfully re-tagged ${data.documents_processed} documents (${data.chunks_updated} chunks updated).`;
+                    statusEl.textContent = `✅ Successfully re - tagged ${data.documents_processed} documents(${data.chunks_updated} chunks updated).`;
                     // Refresh verification
                     setTimeout(() => verifyTagging(), 2000);
                 }
 
                 else {
-                    statusEl.textContent = `Re-tagging failed: ${data.message || 'Unknown error'}`;
+                    statusEl.textContent = `Re - tagging failed: ${data.message || 'Unknown error'} `;
                 }
             }
 
@@ -1994,19 +2119,67 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    statusEl.textContent = `✅ Successfully re-tagged ${data.documents_processed} documents (${data.chunks_updated} chunks updated).`;
+                    statusEl.textContent = `✅ Successfully re - tagged ${data.documents_processed} documents(${data.chunks_updated} chunks updated).`;
                     // Refresh verification
                     setTimeout(() => verifyTagging(), 2000);
                 }
 
                 else {
-                    statusEl.textContent = `Re-tagging failed: ${data.message || 'Unknown error'}`;
+                    statusEl.textContent = `Re - tagging failed: ${data.message || 'Unknown error'} `;
                 }
             }
 
             catch (error) {
                 console.error('Re-tagging failed:', error);
                 statusEl.textContent = 'Re-tagging failed. Check console for details.';
+            }
+        }
+
+        // RETAG SELECTED DOCUMENTS
+        async function retagSelectedDocuments(provider) {
+            const statusEl = document.getElementById('taggingStatus');
+
+            // Get checked boxes
+            const checkboxes = document.querySelectorAll('.retag-select:checked');
+            if (checkboxes.length === 0) {
+                alert('Please check the boxes next to the documents you want to re-tag.');
+                return;
+            }
+
+            const selectedTitles = Array.from(checkboxes).map(cb => cb.value);
+            const providerName = provider === 'ollama' ? 'Ollama' : 'OpenAI';
+            const costWarning = provider === 'openai' ? `\nCost: ~$0.04 per 100 docs` : '';
+
+            if (!confirm(`Re - tag ${selectedTitles.length} documents with ${providerName}?${costWarning} `)) {
+                return;
+            }
+
+            statusEl.textContent = `Queueing ${selectedTitles.length} docs for ${providerName} tagging...`;
+
+            try {
+                const response = await fetch('/retag-documents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        document_titles: selectedTitles,
+                        ai_provider: provider,
+                        ollama_model: provider === 'ollama' ? 'llama3.1' : undefined,
+                        batch_size: 50
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    statusEl.textContent = `✅ Started background process for ${selectedTitles.length} documents.`;
+                    // Refresh verification in 5 seconds to show updates
+                    setTimeout(() => verifyTagging(), 5000);
+                } else {
+                    statusEl.textContent = `Failed: ${data.message} `;
+                }
+            } catch (error) {
+                console.error('Selective re-tag failed:', error);
+                statusEl.textContent = 'Request failed. Check console.';
             }
         }
 
@@ -2078,7 +2251,7 @@
                         detail: 'Query failed'
                     }));
 
-                    throw new Error(errorData.detail || `Server error: ${response.status}`);
+                    throw new Error(errorData.detail || `Server error: ${response.status} `);
                 }
 
                 const result = await response.json();
@@ -2092,7 +2265,7 @@
             catch (error) {
                 console.error('Query error:', error);
 
-                showError(`Failed to process query: ${error.message}`);
+                showError(`Failed to process query: ${error.message} `);
             }
 
             finally {
@@ -2184,21 +2357,21 @@
                 // Add all_traditions tags
                 if (metadata.all_traditions && metadata.all_traditions.length > 0) {
                     metadata.all_traditions.forEach(tradition => {
-                        metadataTags += `<span class="metadata-tag">🕉️ ${escapeHtml(tradition)}</span>`;
+                        metadataTags += `< span class="metadata-tag" >🕉️ ${escapeHtml(tradition)}</span > `;
                     });
                 }
 
                 // Add all_teachers tags
                 if (metadata.all_teachers && metadata.all_teachers.length > 0) {
                     metadata.all_teachers.forEach(teacher => {
-                        metadataTags += `<span class="metadata-tag">👤 ${escapeHtml(teacher)}</span>`;
+                        metadataTags += `< span class="metadata-tag" >👤 ${escapeHtml(teacher)}</span > `;
                     });
                 }
 
                 // Add all_chakras tags
                 if (metadata.all_chakras && metadata.all_chakras.length > 0) {
                     metadata.all_chakras.forEach(chakra => {
-                        metadataTags += `<span class="metadata-tag">⚡ ${escapeHtml(chakra)}</span>`;
+                        metadataTags += `< span class="metadata-tag" >⚡ ${escapeHtml(chakra)}</span > `;
                     });
                 }
 
@@ -2208,12 +2381,12 @@
                         const value = metadata[key];
 
                         if (value && typeof value === 'string') {
-                            metadataTags += `<span class="metadata-tag">🏷️ ${escapeHtml(key)}: ${escapeHtml(value)}</span>`;
+                            metadataTags += `< span class="metadata-tag" >🏷️ ${escapeHtml(key)}: ${escapeHtml(value)}</span > `;
                         }
 
                         else if (Array.isArray(value) && value.length > 0) {
                             value.forEach(item => {
-                                metadataTags += `<span class="metadata-tag">🏷️ ${escapeHtml(key)}: ${escapeHtml(item)}</span>`;
+                                metadataTags += `< span class="metadata-tag" >🏷️ ${escapeHtml(key)}: ${escapeHtml(item)}</span > `;
                             });
                         }
                     }
@@ -2221,11 +2394,11 @@
             }
 
             return `
-                <div class="source-card">
+            < div class="source-card" >
                     <div class="source-title">${index}. ${escapeHtml(source.title || 'Untitled Document')}</div>
                     <div class="source-excerpt">"${escapeHtml(excerpt)}"</div>
                     ${metadataTags ? `<div class="source-metadata">${metadataTags}</div>` : ''}
-                </div>
+                </div >
             `;
         }
 
@@ -2235,7 +2408,15 @@
         function showError(message) {
             const errorMessage = document.getElementById('errorMessage');
 
-            errorMessage.innerHTML = `<div class="error-message">⚠️ ${escapeHtml(message)}</div>`;
+            errorMessage.innerHTML = `< div class="error-message" >⚠️ ${escapeHtml(message)}</div >`;
+        }
+
+        // Helper to toggle all checkboxes
+        function toggleAllRetag(source) {
+            const checkboxes = document.querySelectorAll('.retag-select');
+            for (var i = 0, n = checkboxes.length; i < n; i++) {
+                checkboxes[i].checked = source.checked;
+            }
         }
 
         // Allow Enter key to submit (Shift+Enter for new line)

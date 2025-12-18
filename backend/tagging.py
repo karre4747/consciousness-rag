@@ -634,7 +634,7 @@ Return JSON:
     try:
         client = get_anthropic_client()
         message = client.messages.create(
-            model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
+            model=os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022"),
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}]
         )

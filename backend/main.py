@@ -71,7 +71,7 @@ SYNC_STATUS = "idle"
 async def sync_database_with_pinecone():
     """
     One-off background task to populate SQLite from Pinecone.
-    Runs SLOWLY to avoid OOM.
+    Stream processing to avoid memory issues and long startup.
     """
     global SYNC_STATUS, index
     if SYNC_STATUS == "running": return
@@ -80,62 +80,83 @@ async def sync_database_with_pinecone():
     logger.info("Starting Database Sync...")
     
     try:
-        # 1. Fetch IDs loosely
-        ids_to_process = []
-        for ids in index.list(limit=50): # Small batches
-             ids_to_process.extend(ids)
-             await asyncio.sleep(0.1)
-             
-        # 2. Process in tiny chunks to save memory
-        BATCH_SIZE = 20
         import gc
         
         known_documents = {} # Temp tracker for this run
+        total_vectors_checked = 0
+        documents_found = 0
         
         async def process_batch(batch_ids):
+             nonlocal documents_found
              try:
+                 # Fetch actual vector data
                  fetched = await pinecone_with_retry(lambda: index.fetch(ids=batch_ids), max_retries=3)
+                 
+                 batch_updates = []
                  for vec in fetched.vectors.values():
                      title = vec.metadata.get('title', 'Unknown')
+                     
                      if title not in known_documents:
-                         known_documents[title] = {"count": 0, "tags": False, "provider": None}
+                         known_documents[title] = {
+                             "count": 0, 
+                             "tags": False, 
+                             "provider": None, 
+                             "saved": False,
+                             "is_analyzed": False
+                         }
+                         documents_found += 1
                      
                      known_documents[title]["count"] += 1
-                     if vec.metadata.get('tags'): known_documents[title]["tags"] = True
-                     if vec.metadata.get('ai_provider'): known_documents[title]["provider"] = vec.metadata.get('ai_provider')
+                     md = vec.metadata
                      
+                     # Check tags
+                     tags = md.get('tags', [])
+                     if tags:
+                         known_documents[title]["tags"] = True
+                         # Check for analysis in tags
+                         if isinstance(tags, list):
+                             for t in tags:
+                                 if "analyzed" in str(t).lower() or "claude" in str(t).lower():
+                                     known_documents[title]["is_analyzed"] = True
+                     
+                     # Check provider
+                     if md.get('ai_provider'): 
+                         known_documents[title]["provider"] = md.get('ai_provider')
+                     
+                     # Check explicit analysis markers
+                     if md.get('primary_theme') or md.get('cross_document_themes') or md.get('patterns'):
+                         known_documents[title]["is_analyzed"] = True
+
+                 # Incremental Save Logic
+                 for title, info in known_documents.items():
+                     # Determine status hierarchy
+                     status = "uploaded"
+                     if info["provider"]: 
+                         status = "tagged"
+                     if info["is_analyzed"]:
+                         status = "analyzed"
+                         
+                     database.add_document(title, info["count"], info["tags"])
+                     if status != "uploaded":
+                         database.update_status(title, status, info["provider"])
+                         
              except Exception as e:
                  logger.error(f"Sync fetch error: {e}")
 
-        # Run process
-        for i in range(0, len(ids_to_process), BATCH_SIZE):
-            batch = ids_to_process[i:i+BATCH_SIZE]
-            await process_batch(batch)
+        # Stream IDs and process immediately
+        for ids_batch in index.list():
+            if not ids_batch: continue
             
-            # Incremental Save: Write to DB every batch so user sees progress
-            for title, info in known_documents.items():
-                if info.get('saved', False): continue
+            await process_batch(ids_batch)
+            total_vectors_checked += len(ids_batch)
+            
+            if total_vectors_checked % 100 == 0:
+                logger.info(f"Sync progress: {total_vectors_checked} vectors checked, {documents_found} documents found")
+                gc.collect()
+                await asyncio.sleep(0.1) # Yield to event loop
                 
-                # Determine status
-                status = "uploaded"
-                if info["provider"]: 
-                    status = "tagged" 
-                    
-                database.add_document(title, info["count"], info["tags"])
-                if status != "uploaded":
-                    database.update_status(title, status, info["provider"])
-                
-                # Mark as saved so we don't re-write until final counts
-                # Actually, for counts to update, we *should* re-write. 
-                # SQLite 'INSERT OR REPLACE' handles this in add_document.
-                
-            if i % 100 == 0: 
-                gc.collect() # Force cleanup
-                await asyncio.sleep(0.5) # Yield
-                
-        # Final pass is automatic due to incremental writes
         SYNC_STATUS = "completed"
-        logger.info("Database Sync Complete.")
+        logger.info(f"Database Sync Complete. Processed {total_vectors_checked} vectors.")
         
     except Exception as e:
         logger.error(f"Sync failed: {e}")
@@ -1213,15 +1234,25 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
                         import tagging
                         import datetime
                         
-                        # Aggressive Delay for Rate Limits (5s = ~12 Requests/Min)
-                        # This stays comfortably under most Tier 1 limits
-                        await asyncio.sleep(5.0) 
-                        
-                        batch_results = await tagging.generate_tags_batch_openai(
-                            valid_texts, 
-                            openai_client, 
-                            timeout=60.0
-                        )
+                        batch_results = []
+
+                        if ai_provider == 'ollama':
+                            # Process OLLAMA sequentially (per batch)
+                            for text in valid_texts:
+                                # Run in thread to avoid blocking loop
+                                res = await asyncio.to_thread(tagging.generate_tags_ollama, text, model=ollama_model)
+                                batch_results.append(res)
+                        else:
+                            # OpenAI Path
+                            # Aggressive Delay for Rate Limits (5s = ~12 Requests/Min)
+                            # This stays comfortably under most Tier 1 limits
+                            await asyncio.sleep(5.0) 
+                            
+                            batch_results = await tagging.generate_tags_batch_openai(
+                                valid_texts, 
+                                openai_client, 
+                                timeout=60.0
+                            )
                         
                         # Process results back into vectors
                         batch_vectors_to_update = []
@@ -1683,17 +1714,21 @@ async def analyze_documents(request: AnalyzeRequest):
         })
 
         # Update DB status for analyzed documents
+        unique_titles = set()
         for doc in documents:
             title = doc.get("title", "Unknown")
             if title != "Unknown":
+                unique_titles.add(title)
+                logger.info(f"Marking document as analyzed: {title}")
                 database.update_status(title, "analyzed")
 
         return {
             "status": "success",
             "analysis_type": analysis_type,
-            "documents_analyzed": len(documents),
+            "documents_analyzed": len(unique_titles),
             "estimate": estimate,
-            "batches": batch_results
+            "batches": batch_results,
+            "unique_titles": list(unique_titles)
         }
 
     except HTTPException:
