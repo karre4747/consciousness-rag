@@ -12,20 +12,6 @@
             box-sizing: border-box;
         }
 
-        < !-- ... styles ... -->.header {
-            background: linear-gradient(135deg, var(--deep-purple) 0%, var(--royal-purple) 100%);
-            color: white;
-            padding: 30px 40px;
-            text-align: center;
-        }
-
-        h1 {
-            color: var(--bright-purple);
-            margin-bottom: 10px;
-            font-size: 2.2em;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-
         :root {
             --royal-purple: #6B2C91;
             --deep-purple: #4A148C;
@@ -461,6 +447,24 @@
 
         .history-item:hover {
             background: #f8f9ff;
+        }
+
+        .upgrade-ai-btn {
+            background: linear-gradient(135deg, #FF0080 0%, #7928CA 100%);
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            font-weight: 600;
+            margin-right: 5px;
+            transition: transform 0.2s;
+        }
+
+        .upgrade-ai-btn:hover {
+            transform: scale(1.1);
+            filter: brightness(1.2);
         }
 
         /* Uploaded Documents Section */
@@ -1383,7 +1387,8 @@
                     <div style="text-align:center;">${analyzeStatus}</div>
 
                     <div class="doc-actions">
-                        ${containerId === 'docsList' || containerId === 'completedDocsList' ? `<button onclick="deleteDocument('${escapeHtml(doc.title).replace(/'/g, "\\'")}')">\ud83d\uddd1\ufe0f</button>` : ''}
+                        ${doc.pass_2_status === 'Pending' && doc.pass_1_status === 'Complete' ? `<button class="upgrade-ai-btn" data-title="${escapeHtml(doc.title)}" title="Upgrade to AI Tagging">✨ AI</button>` : ''}
+                        ${containerId === 'docsList' || containerId === 'completedDocsList' ? `<button class="delete-doc-btn" data-title="${escapeHtml(doc.title)}" title="Delete document">🗑️</button>` : ''}
                     </div>
                 </div>
             `}).join('');
@@ -1936,10 +1941,10 @@
 
                 if (data.status === 'building') {
                     statusEl.innerHTML = `
-            < div style = "display: flex; gap: 20px; align-items: center; justify-content: center;" >
+                <div style="display: flex; gap: 20px; align-items: center; justify-content: center;">
                             <span>⏳ <strong>Database Scan in Progress...</strong></span>
                             <span style="color: #666;">This runs in the background. Please wait.</span>
-                        </div >
+                        </div>
             `;
                     // Auto-retry
                     setTimeout(verifyTagging, 2000);
@@ -1951,28 +1956,33 @@
                     return;
                 }
 
-                // FILTER: Show ONLY Untagged (Pass 1 or 2 Incomplete) AND Processing
+                // FILTER: Show documents that need Pass 2 (AI Tagging) or are processing
                 const todoDocs = data.documents.filter(doc => {
-                    const p1 = doc.pass_1_status === 'Pending';
-                    const p2 = doc.pass_2_status === 'Pending';
-                    const processing = doc.pass_2_status.toLowerCase().includes('processing');
-                    return p1 || p2 || processing;
+                    // Need attention if:
+                    // 1. Pass 2 is truly 'Pending'
+                    // 2. OR it has 'Keywords' (Pass 1 complete) but NO ai_provider
+                    // 3. OR it is currently 'Processing'
+                    const status2 = String(doc.pass_2_status || '');
+                    const p2Pending = doc.pass_2_status === 'Pending';
+                    const keywordsOnly = doc.pass_1_status === 'Complete' && doc.pass_2_status === 'Pending';
+                    const processing = status2.toLowerCase().includes('processing');
+                    return p2Pending || keywordsOnly || processing;
                 });
 
                 statusEl.innerHTML = `
-            < div style = "display: flex; gap: 20px; align-items: center;" >
-                        <span>✅ <strong>${data.total_documents}</strong> Total Documents</span>
-                        <span style="color: #d63031;"><strong>${todoDocs.length}</strong> Require Attention</span>
-                        <span style="color: #666;">•</span>
-                        <span style="color: #666;"><strong>${data.total_vectors.toLocaleString()}</strong> Vectors</span>
-                    </div >
+                <div style="display: flex; gap: 20px; align-items: center;">
+                    <span>✅ <strong>${data.total_documents}</strong> Total Documents</span>
+                    <span style="color: #d63031;"><strong>${todoDocs.length}</strong> Require Attention</span>
+                    <span style="color: #666;">•</span>
+                    <span style="color: #666;"><strong>${data.total_vectors.toLocaleString()}</strong> Vectors</span>
+                </div>
             `;
 
                 if (todoDocs.length === 0) {
                     resultsEl.innerHTML = `
-            < div class="no-results" style = "background:#e3fcef; color:#00b894; border:1px solid #00b894;" >
+                <div class="no-results" style="background:#e3fcef; color:#00b894; border:1px solid #00b894;">
                            🎉 All documents are tagged! Nothing to do here.
-                        </div >
+                        </div>
             `;
                     resultsEl.style.display = 'block';
                     return;
@@ -2028,13 +2038,13 @@
                         `;
                 });
 
-                tableHTML += `</tbody></table></div > `;
+                tableHTML += `</tbody></table></div>`;
 
                 // Add legend/info
                 tableHTML += `
-                            < div style = "margin-top: 15px; font-size: 0.85em; color: #666; text-align: right;" >
+                            <div style="margin-top: 15px; font-size: 0.85em; color: #666; text-align: right;">
                                 Showing ${todoDocs.length} documents requiring attention
-                    </div >
+                    </div>
             `;
 
                 resultsEl.innerHTML = tableHTML;
@@ -2056,13 +2066,8 @@
 
             try {
                 const response = await fetch('/retag-documents', {
-
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-
-                    ,
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         document_titles: null, // null = all documents
                         ai_provider: 'ollama',
@@ -2072,21 +2077,15 @@
                 });
 
                 const data = await response.json();
-
                 if (data.status === 'success') {
-                    statusEl.textContent = `✅ Successfully re - tagged ${data.documents_processed} documents(${data.chunks_updated} chunks updated).`;
-                    // Refresh verification
+                    statusEl.textContent = `✅ ${data.message}`;
                     setTimeout(() => verifyTagging(), 2000);
+                } else {
+                    statusEl.textContent = `❌ Re-tagging failed: ${data.message || 'Unknown error'}`;
                 }
-
-                else {
-                    statusEl.textContent = `Re - tagging failed: ${data.message || 'Unknown error'} `;
-                }
-            }
-
-            catch (error) {
+            } catch (error) {
                 console.error('Re-tagging failed:', error);
-                statusEl.textContent = 'Re-tagging failed. Check console for details.';
+                statusEl.textContent = '❌ Re-tagging failed. Check console for details.';
             }
         }
 
@@ -2100,13 +2099,8 @@
 
             try {
                 const response = await fetch('/retag-documents', {
-
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-
-                    ,
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         document_titles: null, // null = all documents
                         ai_provider: 'openai',
@@ -2115,21 +2109,15 @@
                 });
 
                 const data = await response.json();
-
                 if (data.status === 'success') {
-                    statusEl.textContent = `✅ Successfully re - tagged ${data.documents_processed} documents(${data.chunks_updated} chunks updated).`;
-                    // Refresh verification
+                    statusEl.textContent = `✅ ${data.message}`;
                     setTimeout(() => verifyTagging(), 2000);
+                } else {
+                    statusEl.textContent = `❌ Re-tagging failed: ${data.message || 'Unknown error'}`;
                 }
-
-                else {
-                    statusEl.textContent = `Re - tagging failed: ${data.message || 'Unknown error'} `;
-                }
-            }
-
-            catch (error) {
+            } catch (error) {
                 console.error('Re-tagging failed:', error);
-                statusEl.textContent = 'Re-tagging failed. Check console for details.';
+                statusEl.textContent = '❌ Re-tagging failed. Check console for details.';
             }
         }
 
@@ -2424,6 +2412,59 @@
                 askQuestion();
             }
         });
+
+        // Delegated event listener for buttons
+        document.addEventListener('click', function (e) {
+            // Delete Button
+            if (e.target.matches('.delete-doc-btn') || e.target.closest('.delete-doc-btn')) {
+                const btn = e.target.matches('.delete-doc-btn') ? e.target : e.target.closest('.delete-doc-btn');
+                const title = btn.dataset.title;
+                if (title) deleteDocument(title);
+            }
+
+            // Upgrade AI Button
+            if (e.target.matches('.upgrade-ai-btn') || e.target.closest('.upgrade-ai-btn')) {
+                const btn = e.target.matches('.upgrade-ai-btn') ? e.target : e.target.closest('.upgrade-ai-btn');
+                const title = btn.dataset.title;
+                if (title) retagSingleDocument(title);
+            }
+        });
+
+        async function retagSingleDocument(title) {
+            const provider = document.getElementById('aiProvider').value || 'ollama';
+            const model = document.getElementById('ollamaModel').value || 'llama3.1';
+
+            const msg = `Upgrade "${title}" using ${provider.toUpperCase()}?`;
+            if (!confirm(msg)) return;
+
+            // Switch to tagging tab to show progress
+            switchTab('tagging');
+            const statusEl = document.getElementById('taggingStatus');
+            statusEl.textContent = `Upgrading "${title}"...`;
+
+            try {
+                const response = await fetch('/retag-documents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        document_titles: [title],
+                        ai_provider: provider,
+                        ollama_model: model
+                    })
+                });
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    statusEl.textContent = `✅ Upgrade started for "${title}". Check table below for progress.`;
+                    setTimeout(verifyTagging, 1000);
+                } else {
+                    alert(`❌ Upgrade failed: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Upgrade failed:', error);
+                alert('❌ Upgrade failed. Check console.');
+            }
+        }
     </script>
 </body>
 

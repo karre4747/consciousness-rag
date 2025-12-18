@@ -144,7 +144,11 @@ async def sync_database_with_pinecone():
                  logger.error(f"Sync fetch error: {e}")
 
         # Stream IDs and process immediately
-        for ids_batch in index.list():
+        def get_all_batches():
+            return list(index.list())
+        
+        all_batches = await asyncio.to_thread(get_all_batches)
+        for ids_batch in all_batches:
             if not ids_batch: continue
             
             await process_batch(ids_batch)
@@ -1281,7 +1285,7 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
                                 "consciousness_level": result.get("consciousness_level") or keyword_tags.get("consciousness_level", ""),
                                 # Standard fields...
                                 "ai_provider": ai_provider,
-                                "last_updated": datetime.datetime.utcnow().isoformat()
+                                "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat()
                             }
                             
                             updated_metadata = clean_metadata_for_pinecone(updated_metadata)
@@ -1316,8 +1320,15 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
                         failed_chunks += len(batch)
                         
                 # Document complete
-                database.update_status(title, "tagged", ai_provider.upper())
-                logger.info(f"Retagged {title}: {len(matches)} chunks")
+                # PRESERVE STATUS: If it was already analyzed, keep it analyzed.
+                current_docs = database.get_documents()
+                current_doc = next((d for d in current_docs if d['title'] == title), None)
+                final_status = "tagged"
+                if current_doc and current_doc.get('status') == 'analyzed':
+                    final_status = "analyzed"
+                
+                database.update_status(title, final_status, ai_provider.upper())
+                logger.info(f"Retagged {title}: {len(matches)} chunks (Final Status: {final_status})")
                 
             except Exception as e:
                  logger.error(f"Failed to process document {title}: {e}")

@@ -117,3 +117,19 @@ def get_stats():
         return {"total": total, "pending_tag": pending_tag, "pending_analyze": pending_analyze}
     except Exception as e:
         return {"total": 0, "pending_tag": 0, "pending_analyze": 0}
+
+def get_document_by_title(title):
+    """Get a single document by title"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM documents WHERE title = ?", (title,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Failed to get document by title {title}: {e}")
+        return None
