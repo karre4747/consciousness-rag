@@ -1035,7 +1035,7 @@
                     <input type="text" id="analysisDocSearch" placeholder="🔍 Search to filter list..."
                         onkeyup="filterAnalysisDocuments()"
                         style="padding: 8px; width: 100%; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                    <div class="docs-list" id="analysisDocsList" style="max-height: 300px; border: 1px solid #ccc;">
+                    <div class="docs-list" id="analysisDocsList" style="max-height: 600px; border: 1px solid #ccc;">
                         <div class="loading">Loading documents...</div>
                     </div>
                 </div>
@@ -1333,9 +1333,10 @@
             }
 
             // Headers for clarity
+            const headerGrid = '40px 3fr 1fr 1fr 1.5fr 1fr 100px';
             const headerHTML = `
-                <div class="doc-item header-row" style="background: #eee; font-weight: 700; color: #555; position: sticky; top: 0; z-index: 10;">
-                    <div></div>
+                <div class="doc-item header-row" style="background: #eee; font-weight: 700; color: #555; position: sticky; top: 0; z-index: 10; grid-template-columns: ${headerGrid};">
+                    <div><input type="checkbox" id="selectAll-${containerId}" onchange="toggleSelectAll('${containerId}', this.checked)"></div>
                     <div>Title</div>
                     <div style="text-align:center">Chunks</div>
                     <div style="text-align:center">1. Upload</div>
@@ -1463,20 +1464,7 @@
                 renderDocListToContainer('completedDocsList', completedDocs);
 
                 // 2. Analysis Tab: Show UNANALYZED Only (Todo View)
-                // Filter: Pass 3 Pending OR Pass 2 Pending (if implied)
-                // For now, let's filter those that don't have extensive AI generation
-                const unanalyzedDocs = data.documents.filter(doc => {
-                    // If Pass 3 is strictly "Pending", show it. 
-                    // Or if user wants to see things that "Need Analysis", we assume anything not explicitly marked Complete
-                    return doc.pass_3_status !== 'Complete';
-                });
-
-                // Analysis tab usually uses a simpler list, but our new renderer handles it gracefully
-                // We might need to handle the header structure if it expects the old grid
-                // Actually, renderDocListToContainer adds a header row now. 
-                // For the "Select Documents for Analysis" small list, we might want a Compact version.
-                // Let's rely on standard rendering for now, or add a 'compact' flag later if needed.
-                // Re-using the same renderer for analysis list
+                const unanalyzedDocs = data.documents.filter(doc => doc.pass_3_status !== 'Complete');
                 renderDocListToContainer('analysisDocsList', unanalyzedDocs);
 
                 // Update Analysis Header to reflect Todo count
@@ -1491,6 +1479,16 @@
                     if (el) el.innerHTML = '<div class="loading">❌ Failed to load documents</div>';
                 });
             }
+        }
+
+        // Global toggle for "Select All" checkboxes
+        function toggleSelectAll(containerId, checked) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            const checkboxes = container.querySelectorAll('.doc-select');
+            checkboxes.forEach(cb => {
+                cb.checked = checked;
+            });
         }
 
         // Refresh document list
