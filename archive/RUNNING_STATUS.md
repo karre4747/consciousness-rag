@@ -129,8 +129,8 @@ Set up nginx to serve on port 80/443 with SSL:
 # Install nginx if not already installed
 apt install nginx
 
-# Create config (see nginx.conf in project root)
-# Then access via http://your-domain.com
+# Create config (see Deployment Guide for Nginx/Certbot setup)
+# Then access via https://<YOUR_DOMAIN>
 ```
 
 ---
@@ -181,8 +181,8 @@ ss -tlnp | grep :8000
 # Check for errors in logs
 journalctl -u evolve -n 100 | grep -i error
 
-# Check .env file for missing API keys
-cat /root/consciousness-rag/backend/.env
+# Verify that required API keys are configured in your environment
+# (See internal setup guide for details on .env configuration)
 ```
 
 ---
@@ -203,12 +203,12 @@ cat /root/consciousness-rag/backend/.env
 
 Your **Evolve Consciousness Engine Portal** is now:
 - ✅ Running 24/7
-- ✅ Accessible at `http://<YOUR_SERVER_IP>:8000`
+- ✅ Accessible at `https://<YOUR_DOMAIN>` (or `http://<YOUR_SERVER_IP>:8000` for testing)
 - ✅ Will automatically restart on server reboot
 - ✅ All services connected and healthy
 
 **You can now:**
-1. Open your browser and go to `http://<YOUR_SERVER_IP>:8000`
+1. Open your browser and go to `https://<YOUR_DOMAIN>`
 2. Upload documents through the web interface
 3. Query your knowledge base using the Research Assistant
 4. Manage your content library
@@ -218,7 +218,7 @@ Your **Evolve Consciousness Engine Portal** is now:
 
 ---
 
-*Last verified: December 9, 2025*
+*Last verified: December 21, 2025*
 
 
 
