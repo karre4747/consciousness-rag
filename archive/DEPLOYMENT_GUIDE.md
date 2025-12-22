@@ -112,7 +112,16 @@ CHUNK_OVERLAP=200
 
 Save and exit (`Ctrl+X`, then `Y`, then `Enter`).
 
-### **Step 4: Create Systemd Service**
+### **Step 4: Create Service User & Systemd Service**
+
+First, create a dedicated user for security (never run as root):
+
+```bash
+useradd -m -s /bin/bash evolve-engine
+chown -R evolve-engine:evolve-engine /opt/conscious-engine
+```
+
+Now create the service file:
 
 Create a service file to run the API automatically:
 
@@ -129,7 +138,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=evolve-engine
 WorkingDirectory=/opt/conscious-engine/backend
 Environment="PATH=/opt/conscious-engine/backend/venv/bin"
 ExecStart=/opt/conscious-engine/backend/venv/bin/python main.py
@@ -270,17 +279,20 @@ mkdir -p /opt/content/notion_consolidation
 # 2. Copy your files (preserving directory structure)
 cp -r /home/ubuntu/notion_consolidation/* /opt/content/notion_consolidation/
 
-# 3. Set ownership and permissions (assuming service runs as root, but readable by all is safest here)
-chown -R root:root /opt/content
+# 3. Set ownership and permissions (service runs as evolve-engine)
+chown -R evolve-engine:evolve-engine /opt/content
 chmod -R 755 /opt/content
 
 # 4. Verify permissions
 ls -l /opt/content/notion_consolidation
 ```
 
-**Now run the ingestion script pointing to the shared path:**
+**Now run the ingestion script pointing to the shared path (as the service user):**
 
 ```bash
+sudo -u evolve-engine bash
+source /opt/conscious-engine/backend/venv/bin/activate
+
 # Upload the consolidated training documents
 python ingest_content.py /opt/content/notion_consolidation --level beginner
 
