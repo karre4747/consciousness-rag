@@ -713,6 +713,16 @@ Categories to detect: chakras, recovery_principles, consciousness_levels, tradit
             temperature=0.3
         )
 
+    # Helper for zero usage stats to prevent KeyErrors
+    def make_zero_usage_stats():
+        return {
+            "total_cost": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "input_cost": 0,
+            "output_cost": 0
+        }
+
     for attempt in range(max_retries):
         try:
             response = await asyncio.wait_for(
@@ -755,10 +765,10 @@ Categories to detect: chakras, recovery_principles, consciousness_levels, tradit
                 
             except json.JSONDecodeError:
                 # Fallback: return empty dicts to trigger keyword fallback
-                return [{} for _ in texts], {"total_cost": 0, "input_tokens": 0, "output_tokens": 0}
+                return [{} for _ in texts], make_zero_usage_stats()
 
         except (RateLimitError, APIConnectionError) as e:
-            if attempt == max_retries - 1: return [{} for _ in texts], {"total_cost": 0}
+            if attempt == max_retries - 1: return [{} for _ in texts], make_zero_usage_stats()
             delay = min(base_delay * (2 ** attempt), max_delay)
             # Add jitter
             delay += random.uniform(0, 1)
@@ -767,7 +777,7 @@ Categories to detect: chakras, recovery_principles, consciousness_levels, tradit
             
         except Exception as e:
             print(f"Batch OpenAI error: {e}")
-            return [{} for _ in texts], {"total_cost": 0}
+            return [{} for _ in texts], make_zero_usage_stats()
 
-    return [{} for _ in texts], {"total_cost": 0}
+    return [{} for _ in texts], make_zero_usage_stats()
 
