@@ -349,10 +349,14 @@ def generate_tags_ollama(text: str, model: str = "llama3.1") -> Dict[str, Any]:
     import requests
     import json
 
+    # Truncate to reasonable limit for local processing
+    MAX_OLLAMA_CHARS = 50000
+    text_to_analyze = text[:MAX_OLLAMA_CHARS] if len(text) > MAX_OLLAMA_CHARS else text
+
     prompt = f"""Analyze this consciousness/spiritual text and identify relevant tags.
 
 Text:
-{text}
+{text_to_analyze}
 
 Return ONLY valid JSON with these fields:
 {
@@ -426,10 +430,14 @@ async def generate_tags_openai(text: str, openai_client, max_tokens: int = 300, 
     import random
     from openai import OpenAIError, RateLimitError, APITimeoutError, APIConnectionError
 
+    # GPT-3.5-turbo context window: ~16k tokens = ~64k chars (safe limit: 50k)
+    MAX_OPENAI_CHARS = 50000
+    text_to_analyze = text[:MAX_OPENAI_CHARS] if len(text) > MAX_OPENAI_CHARS else text
+
     prompt = f"""Analyze this consciousness/spiritual text and identify relevant tags.
 
 Text:
-{text}
+{text_to_analyze}
 
 Return ONLY valid JSON with these fields:
 {
