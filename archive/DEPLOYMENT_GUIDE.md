@@ -259,16 +259,35 @@ python ingest_content.py /opt/content/beginner --level beginner --ai-tagging
 
 ### **Upload Your Notion Documents**
 
-You already have consolidated documents in `/home/ubuntu/notion_consolidation/`. Upload them:
+You already have consolidated documents in `/home/ubuntu/notion_consolidation/`. However, since the service runs as `root` (or a specific service user), we need to ensure it can read these files.
+
+**Recommendation:** Move the files to a shared location like `/opt/content/` and set permissions.
+
+```bash
+# 1. Create a shared content directory
+mkdir -p /opt/content/notion_consolidation
+
+# 2. Copy your files (preserving directory structure)
+cp -r /home/ubuntu/notion_consolidation/* /opt/content/notion_consolidation/
+
+# 3. Set ownership and permissions (assuming service runs as root, but readable by all is safest here)
+chown -R root:root /opt/content
+chmod -R 755 /opt/content
+
+# 4. Verify permissions
+ls -l /opt/content/notion_consolidation
+```
+
+**Now run the ingestion script pointing to the shared path:**
 
 ```bash
 # Upload the consolidated training documents
-python ingest_content.py /home/ubuntu/notion_consolidation --level beginner
+python ingest_content.py /opt/content/notion_consolidation --level beginner
 
 # Upload the three-level program documents
-python ingest_content.py /home/ubuntu/notion_consolidation/BEGINNER* --level beginner
-python ingest_content.py /home/ubuntu/notion_consolidation/INTERMEDIATE* --level intermediate
-python ingest_content.py /home/ubuntu/notion_consolidation/ADVANCED* --level advanced
+python ingest_content.py /opt/content/notion_consolidation/BEGINNER* --level beginner
+python ingest_content.py /opt/content/notion_consolidation/INTERMEDIATE* --level intermediate
+python ingest_content.py /opt/content/notion_consolidation/ADVANCED* --level advanced
 ```
 
 ---
