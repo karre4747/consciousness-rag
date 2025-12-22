@@ -192,8 +192,8 @@ cat /root/consciousness-rag/backend/.env
 **Service File:** `/etc/systemd/system/evolve.service`
 
 **Key Settings:**
-- **Working Directory:** `/root/consciousness-rag/backend`
-- **Executable:** `/usr/bin/python3 /root/consciousness-rag/backend/main.py`
+- **Working Directory:** `<PROJECT_ROOT>/backend`
+- **Executable:** `<PYTHON_BIN> <PROJECT_ROOT>/backend/main.py`
 - **Restart Policy:** Always restart on failure
 - **Restart Delay:** 10 seconds
 
