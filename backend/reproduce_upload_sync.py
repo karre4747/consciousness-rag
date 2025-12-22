@@ -8,9 +8,12 @@ def test_upload():
     
     # Check if server is up
     try:
-        resp = requests.get(f"{BASE_URL}/api")
+        resp = requests.get(f"{BASE_URL}/api", timeout=5)
         print(f"Server Status: {resp.status_code} - {resp.json()}")
-    except Exception as e:
+    except requests.Timeout:
+        print("Error: Server status check timed out after 5 seconds.")
+        return
+    except requests.RequestException as e:
         print(f"Server not reachable: {e}")
         return
 
