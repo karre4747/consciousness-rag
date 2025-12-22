@@ -1223,7 +1223,6 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
         # Main Loop: Process one document at a time
         for title in document_titles_to_process:
             database.update_status(title, "processing", ai_provider.upper())
-            RETAG_STATUS["processed_documents"] += 1
             try:
                 # Get chunks for THIS document
                 query_vector = [0.0] * PINECONE_DIMENSION
@@ -1376,6 +1375,7 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
                 
                 database.update_status(title, final_status, ai_provider.upper(), schema_version=2)
                 logger.info(f"Retagged {title}: {len(matches)} chunks (Final Status: {final_status}, Schema: V2)")
+                RETAG_STATUS["processed_documents"] += 1
                 
             except Exception as e:
                 logger.error(f"Failed to process document {title}: {e}")
@@ -1713,19 +1713,33 @@ async def analyze_documents(request: AnalyzeRequest):
             matches = results.matches
         elif analysis_type == "pending":
             # Fetch specifically documents that are NOT complete
-            results = await pinecone_with_retry(
-                lambda: index.query(
-                    vector=query_vector,
-                    top_k=10000,
-                    filter={
-                        "pass_3_status": {"$ne": "Complete"}
-                    },
-                    include_metadata=True
-                ),
-                max_retries=2,
-                timeout=60.0
-            )
-            matches = results.matches
+            # Logic: Query SQLite for pending docs, then fetch from Pinecone by title
+            # This fixes the issue where "pass_3_status" is not in Pinecone metadata
+            all_docs = database.get_documents()
+            # Filter matches "pass_3_status" != "Complete" -> status != 'analyzed'
+            pending_titles = [d['title'] for d in all_docs if d.get('status') != 'analyzed']
+            
+            # Respect limit
+            titles_to_process = pending_titles[:limit]
+            logger.info(f"Found {len(pending_titles)} pending documents. Fetching top {len(titles_to_process)} from Pinecone.")
+            
+            for title in titles_to_process:
+                try:
+                    results = await pinecone_with_retry(
+                        lambda: index.query(
+                            vector=query_vector,
+                            top_k=10000,
+                            filter={"title": title},
+                            include_metadata=True
+                        ),
+                        max_retries=2,
+                        timeout=30.0
+                    )
+                    if results and results.matches:
+                        matches.extend(results.matches)
+                except Exception as e:
+                    logger.error(f"Failed to fetch pending document '{title}' from Pinecone: {e}")
+                    # Continue to next document
         elif analysis_type == "theme":
             results = await pinecone_with_retry(
                 lambda: index.query(
