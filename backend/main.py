@@ -1485,7 +1485,7 @@ async def delete_document(title: str):
             for i in range(0, len(ids_to_delete), BATCH_SIZE):
                 batch_ids = ids_to_delete[i:i + BATCH_SIZE]
                 await pinecone_with_retry(
-                    lambda: index.delete(ids=batch_ids),
+                    lambda batch_ids=batch_ids: index.delete(ids=batch_ids),
                     max_retries=3,
                     timeout=30.0
                 )
