@@ -26,17 +26,17 @@ This is the **Evolve Consciousness Engine** - a web portal/app that provides:
 
 **Main Portal:**
 ```
-http://146.190.169.226:8000
+http://<YOUR_SERVER_IP>:8000
 ```
 
 **API Status:**
 ```
-http://146.190.169.226:8000/api
+http://<YOUR_SERVER_IP>:8000/api
 ```
 
 **Health Check:**
 ```
-http://146.190.169.226:8000/health
+http://<YOUR_SERVER_IP>:8000/health
 ```
 
 ### **If You Have a Domain:**
@@ -114,13 +114,13 @@ The service is **enabled to start automatically** on boot. It will:
 
 **Option 1: Direct IP Access (Current)**
 ```
-http://146.190.169.226:8000
+http://<YOUR_SERVER_IP>:8000
 ```
 
 **Option 2: Set Up Port Forwarding**
 If you're behind a router, configure port forwarding:
 - External Port: 8000 (or any port you prefer)
-- Internal IP: 146.190.169.226
+- Internal IP: <YOUR_SERVER_IP>
 - Internal Port: 8000
 
 **Option 3: Use Nginx Reverse Proxy (Recommended for Production)**
@@ -203,12 +203,12 @@ cat /root/consciousness-rag/backend/.env
 
 Your **Evolve Consciousness Engine Portal** is now:
 - ✅ Running 24/7
-- ✅ Accessible at `http://146.190.169.226:8000`
+- ✅ Accessible at `http://<YOUR_SERVER_IP>:8000`
 - ✅ Will automatically restart on server reboot
 - ✅ All services connected and healthy
 
 **You can now:**
-1. Open your browser and go to `http://146.190.169.226:8000`
+1. Open your browser and go to `http://<YOUR_SERVER_IP>:8000`
 2. Upload documents through the web interface
 3. Query your knowledge base using the Research Assistant
 4. Manage your content library
