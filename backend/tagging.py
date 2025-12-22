@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Evolve Consciousness Engine - Two-Pass Tagging System
-Pass 1: OpenAI GPT-3.5 for fast initial tagging (during upload)
+Pass 1: OpenAI GPT-4o-mini for fast initial tagging (during upload)
 Pass 2: Claude for deep semantic analysis (background job)
 Updated: November 30, 2025
 """
@@ -413,8 +413,8 @@ Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), 
 
 async def generate_tags_openai(text: str, openai_client, max_tokens: int = 300, timeout: float = 15.0) -> Dict[str, Any]:
     """
-    PASS 1: Use OpenAI GPT-3.5-turbo for fast, cheap initial tagging during upload
-    This replaces the expensive Claude call with a $0.50/1M token model
+    PASS 1: Use OpenAI GPT-4o-mini for fast, cheap initial tagging during upload
+    This replaces the expensive Claude call with a very affordable model (~$0.15/1M tokens)
     
     Args:
         text: Text to analyze
@@ -430,8 +430,9 @@ async def generate_tags_openai(text: str, openai_client, max_tokens: int = 300, 
     import random
     from openai import OpenAIError, RateLimitError, APITimeoutError, APIConnectionError
 
-    # GPT-3.5-turbo context window: ~16k tokens = ~64k chars (safe limit: 50k)
-    MAX_OPENAI_CHARS = 50000
+    # GPT-4o-mini context window: 128k tokens = ~500k chars
+    # Setting a safe limit of 100k chars allows massive headroom
+    MAX_OPENAI_CHARS = 100000
     text_to_analyze = text[:MAX_OPENAI_CHARS] if len(text) > MAX_OPENAI_CHARS else text
 
     prompt = f"""Analyze this consciousness/spiritual text and identify relevant tags.
@@ -452,10 +453,9 @@ Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), 
     base_delay = 1
     max_delay = 30
 
-    def _call_openai():
         """Synchronous OpenAI API call"""
         return openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
             temperature=0.3
@@ -578,7 +578,7 @@ async def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "oll
                 "recovery_focus": keyword_tags.get("recovery_focus", ""),
                 "healing_modality": keyword_tags.get("healing_modality", ""),
                 "ai_provider": ai_provider,
-                "ai_model": ollama_model if ai_provider == "ollama" else "gpt-3.5-turbo"
+                "ai_model": ollama_model if ai_provider == "ollama" else "gpt-4o-mini"
             }
 
             # Only add program_level if detected from filename
@@ -680,9 +680,9 @@ async def generate_tags_batch_openai(texts: List[str], openai_client, max_tokens
     import random
     from openai import OpenAIError, RateLimitError, APITimeoutError, APIConnectionError
 
-    # GPT-3.5 Turbo Pricing
-    COST_INPUT_PER_1M = 0.50
-    COST_OUTPUT_PER_1M = 1.50
+    # GPT-4o-mini Pricing (Approximate)
+    COST_INPUT_PER_1M = 0.15
+    COST_OUTPUT_PER_1M = 0.60
 
     # Construct batch prompt
     combined_text = ""
@@ -717,7 +717,7 @@ Categories to detect: chakras, recovery_principles, consciousness_levels, tradit
 
     def _call_openai():
         return openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
             temperature=0.3

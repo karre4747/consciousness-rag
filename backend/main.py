@@ -1494,16 +1494,13 @@ async def delete_document(title: str):
         # Also remove from SQLite
         database.delete_document(title)
         
-        # Remove from in-memory status
-        if title in RETAG_STATUS:
-             pass # Simple cleanup if needed
-
-        logger.info(f"Deleted {len(ids_to_delete) if 'ids_to_delete' in locals() else 0} chunks of document '{title}'")
+        logger.info(f"Deleted {len(ids_to_delete)} chunks of document '{title}'")
 
         return {
             "status": "success",
-            "message": f"Deleted {len(ids_to_delete) if 'ids_to_delete' in locals() else 0} chunks of '{title}'",
-            "chunks_deleted": len(ids_to_delete) if 'ids_to_delete' in locals() else 0
+            "message": f"Deleted {len(ids_to_delete)} chunks of '{title}'",
+            "chunks_deleted": len(ids_to_delete)
+        }
         }
 
     except asyncio.TimeoutError:

@@ -25,10 +25,9 @@ def test_upload():
     try:
         start = time.time()
         print("Sending upload request...")
-        resp = requests.post(f"{BASE_URL}/upload", json=payload)
+        resp = requests.post(f"{BASE_URL}/upload", json=payload, timeout=30)
         print(f"Upload Response ({time.time() - start:.2f}s): {resp.status_code}")
         print(resp.text)
-        
         if resp.status_code == 200:
             print("\nChecking /document-status...")
             time.sleep(1)

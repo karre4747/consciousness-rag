@@ -88,7 +88,7 @@ This is the clear, step-by-step plan to bring Evolve to life.
     -   Use your `content_creation_prompt.py` as a guide.
 
 2.  **Run the Fine-Tuning Job:**
-    -   Use the OpenAI API (or another service) to fine-tune a base model (like GPT-3.5-Turbo) on your dataset.
+    -   Use the OpenAI API (or another service) to fine-tune a base model (like GPT-4o-mini) on your dataset.
 
 3.  **Integrate the Fine-Tuned Model:**
     -   Update the `/query` endpoint to call your new, custom-named fine-tuned model.
