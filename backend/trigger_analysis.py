@@ -7,13 +7,20 @@ import sqlite3
 def trigger_analysis():
     # 1. Get pending titles from DB
     print("🔵 Connecting to database...")
-    conn = sqlite3.connect('consciousness.db')
-    cursor = conn.cursor()
-    # Get everything that isn't analyzed
-    cursor.execute("SELECT title FROM documents WHERE status != 'analyzed'")
-    rows = cursor.fetchall()
-    titles = [r[0] for r in rows]
-    conn.close()
+    print("🔵 Connecting to database...")
+    try:
+        with sqlite3.connect('consciousness.db') as conn:
+            cursor = conn.cursor()
+            # Get everything that isn't analyzed
+            cursor.execute("SELECT title FROM documents WHERE status != 'analyzed'")
+            rows = cursor.fetchall()
+            titles = [r[0] for r in rows]
+    except sqlite3.OperationalError as e:
+        print(f"❌ Database error: {e}")
+        return
+    except Exception as e:
+        print(f"❌ Unexpected error connecting to DB: {e}")
+        return
 
     if not titles:
         print("✅ No pending documents found! System is clear.")
