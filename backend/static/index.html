@@ -66,6 +66,8 @@
             background: var(--deep-purple);
             border-bottom: 3px solid var(--bright-purple);
             overflow-x: auto;
+            position: relative;
+            z-index: 10;
         }
 
         .tab-btn {
@@ -951,6 +953,7 @@
             <button class="tab-btn" onclick="switchTab('tagging', event)">🏷️ Tagging</button>
             <button class="tab-btn" onclick="switchTab('analysis', event)">🧠 Analysis</button>
             <button class="tab-btn" onclick="switchTab('documents', event)">📚 Documents</button>
+            <button class="tab-btn" onclick="switchTab('status', event)">📊 Status</button>
             <button class="tab-btn" onclick="switchTab('query', event)">🔮 Query</button>
         </div>
 
@@ -1002,7 +1005,7 @@
 
             <!-- Spending Dashboard -->
             <div class="spending-dashboard" id="spendingDashboard">
-                <h3>💰 Claude Spending - <span id="currentMonth">November 2025</span></h3>
+                <h3>💰 API Spending - <span id="currentMonth">November 2025</span></h3>
                 <div class="spending-summary">
                     <div class="stat-box">
                         <div class="stat-number" id="spentThisMonth">$0.00</div>
@@ -1055,6 +1058,16 @@
                         style="background: white; color: var(--deep-purple); border-color: var(--deep-purple);">Re-tag
                         Selected (OpenAI)</button>
                 </div>
+
+                <!-- FILTER CONTROLS -->
+                <div
+                    style="margin: 10px 0; padding: 10px; background: #f1f2f6; border-radius: 8px; text-align: center;">
+                    <label
+                        style="cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: #2d3436;">
+                        <input type="checkbox" id="hideV2Checkbox" onchange="verifyTagging()" checked>
+                        Hide V2.0 (High Performance) Completed Docs
+                    </label>
+                </div>
                 <div class="analysis-status" id="taggingStatus">Click "Verify Tagging Status" to check your documents.
                 </div>
                 <div class="analysis-results" id="taggingResults" style="display:none;"></div>
@@ -1071,6 +1084,8 @@
                 <div class="analysis-actions">
                     <button class="analysis-btn" onclick="estimateAndRunAnalysis('recent', 50)">Analyze Recent
                         (50)</button>
+                    <button class="analysis-btn" onclick="estimateAndRunAnalysis('pending', 0)"
+                        style="background:var(--rich-green); border-color:var(--rich-green);">Analyze Pending</button>
                     <button class="analysis-btn" onclick="estimateAndRunAnalysis('full', 0)">Analyze All</button>
                     <button class="analysis-btn" onclick="estimateAndRunAnalysis('selected', 0)">Analyze
                         Selected</button>
@@ -1104,6 +1119,9 @@
                     waiting for analysis</p>
                 <div class="docs-controls">
                     <button class="secondary-btn" onclick="refreshDocumentList()">🔄 Refresh List </button>
+                    <button class="secondary-btn" onclick="deleteSelectedDocuments()"
+                        style="background:white; color:#d63031; border-color:#d63031; margin-left: 10px;">🗑️ Delete
+                        Selected</button>
                     <input type="text" id="docSearch" placeholder="🔍 Search documents..." onkeyup="filterDocuments()"
                         style="padding: 10px; border-radius: 5px; border: 2px solid var(--royal-purple); width: 300px; font-size: 1em; color: var(--deep-purple);">
                 </div>
@@ -1125,6 +1143,29 @@
                 </div>
                 <div class="docs-list" id="completedDocsList">
                     <div class="loading">Loading completed documents...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Tab -->
+        <div id="status-tab" class="tab-content">
+            <div class="analysis-section">
+                <h3>System Status</h3>
+                <div class="analysis-status" id="systemStatus">Checking system status...</div>
+
+                <h4 style="margin-top: 20px; color: var(--royal-purple);">Data Operations</h4>
+                <div class="analysis-actions">
+                    <button class="analysis-btn" onclick="retagAllDocumentsOpenAI()">🔄 Re-tag All (OpenAI)</button>
+                    <button class="analysis-btn" style="background:#e0e0e0; color:#555; border-color:#ccc;"
+                        onclick="stopAnalysisPolling()">⏹ Stop Polling</button>
+                </div>
+
+                <div class="progress-container" id="retagProgressContainer" style="display:block;">
+                    <div class="stat-label" style="text-align:left; margin-bottom:5px;">Re-tagging Progress</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="retagProgressFill" style="width: 0%"></div>
+                    </div>
+                    <div class="doc-chunks" id="retagProgressText">0 / 0 Documents Processed</div>
                 </div>
             </div>
         </div>
@@ -1431,7 +1472,7 @@
 
                     <div class="doc-actions">
                         ${doc.pass_2_status === 'Pending' && doc.pass_1_status === 'Complete' ? `<button class="upgrade-ai-btn" data-title="${escapeHtml(doc.title)}" title="Upgrade to AI Tagging">✨ AI</button>` : ''}
-                        ${containerId === 'docsList' || containerId === 'completedDocsList' ? `<button class="delete-doc-btn" data-title="${escapeHtml(doc.title)}" title="Delete document">🗑️</button>` : ''}
+                        <button class="delete-doc-btn" onclick="deleteDocument('${escapeHtml(doc.title)}')" title="Delete document">🗑️</button>
                     </div>
                 </div>
             `}).join('');
@@ -1608,20 +1649,85 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    alert(`✅ ${data.message}`);
                     await loadDocumentList(); // Refresh list
+                } else {
+                    alert(`❌ Failed: ${data.detail}`);
                 }
-
-                else {
-                    alert('❌ Failed to delete document');
-                }
-
-            }
-
-            catch (error) {
-                alert('❌ Failed to delete document');
+            } catch (error) {
                 console.error('Delete error:', error);
+                alert('Failed to connect to server.');
             }
+        }
+
+        // Bulk Delete
+        async function deleteSelectedDocuments() {
+            const checkboxes = document.querySelectorAll('.docs-list input.doc-select:checked');
+            if (checkboxes.length === 0) {
+                alert('Please select documents to delete.');
+                return;
+            }
+
+            if (!confirm(`⚠️ Are you sure you want to delete ${checkboxes.length} selected documents?\n\nThis will remove them from the database and Pinecone permanently.`)) {
+                return;
+            }
+
+            let deletedCount = 0;
+            const total = checkboxes.length;
+
+            // Concurrency Control (Reduced to 2 to prevent 429 Rate Limits)
+            const MAX_CONCURRENT = 2;
+            const queue = Array.from(checkboxes);
+
+
+            const errors = [];
+
+            async function processNext() {
+                if (queue.length === 0) return;
+                const cb = queue.shift();
+                const title = cb.value;
+                const row = cb.closest('.doc-item');
+
+                try {
+                    if (row) row.style.opacity = '0.5';
+
+                    const response = await fetch(`/delete-document/${encodeURIComponent(title)}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (response.ok) {
+                        deletedCount++;
+                        if (row) row.remove();
+                    } else {
+                        const errText = await response.text();
+                        console.error(`Failed to delete ${title}: ${response.status} ${errText}`);
+                        errors.push(`${title}: ${response.status} - ${errText.substring(0, 50)}`);
+                        if (row) row.style.opacity = '1'; // Reset
+                    }
+                } catch (e) {
+                    console.error(`Failed to delete ${title}`, e);
+                    errors.push(`${title}: Network/Client Error`);
+                    if (row) row.style.opacity = '1';
+                }
+
+                // Chain next
+                await processNext();
+            }
+
+            // Start pool
+            const workers = [];
+            for (let i = 0; i < Math.min(total, MAX_CONCURRENT); i++) {
+                workers.push(processNext());
+            }
+
+            await Promise.all(workers);
+
+            if (errors.length > 0) {
+                alert(`⚠️ Deleted ${deletedCount} of ${total} documents.\n\nErrors:\n${errors.join('\n').substring(0, 500)}...`);
+            } else {
+                alert(`✅ Deleted ${deletedCount} of ${total} documents.`);
+            }
+
+            loadDocumentList();
         }
 
         // Check for duplicate before uploading
@@ -1697,6 +1803,31 @@
             document.getElementById('analysesCount').innerHTML = `🔄 <strong>${stats.analyses_count || 0} analyses</strong> performed this month`;
 
             document.getElementById('tokensProcessed').innerHTML = `📈 <strong>${stats.total_input_tokens || 0} tokens</strong> processed`;
+
+            // Breakdown
+            const breakdown = stats.breakdown || { claude: 0, openai: 0 };
+            const bdHTML = `
+                <div style="margin-top:12px; padding-top:12px; border-top:1px dashed #ddd; font-size:0.9em;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#666;">🤖 OpenAI Tagging:</span>
+                        <span style="font-weight:600; color:#333;">$${(breakdown.openai || 0).toFixed(2)}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#666;">🧠 Claude Analysis:</span>
+                        <span style="font-weight:600; color:#333;">$${(breakdown.claude || 0).toFixed(2)}</span>
+                    </div>
+                </div>
+            `;
+
+            const detailContainer = document.querySelector('.spending-details');
+            // Remove old breakdown if exists
+            const oldBd = document.getElementById('sepndingBreakdownDetail');
+            if (oldBd) oldBd.remove();
+
+            const bdDiv = document.createElement('div');
+            bdDiv.id = 'sepndingBreakdownDetail';
+            bdDiv.innerHTML = bdHTML;
+            detailContainer.appendChild(bdDiv);
 
             const progress = Math.min(100, Math.round(stats.budget_used_percentage || 0));
             const progressBar = document.getElementById('budgetProgressBar');
@@ -1851,55 +1982,77 @@
         // ========================================
 
         function getSelectedTitles() {
+            console.log('🔵 getSelectedTitles called');
             // Only get checked boxes from the currently active tab
             const activeTab = document.querySelector('.tab-content.active');
-            if (!activeTab) return [];
-            return Array.from(activeTab.querySelectorAll('.doc-select:checked')).map(cb => cb.value);
+            console.log('🔵 Active tab:', activeTab ? activeTab.id : 'NONE');
+
+            if (!activeTab) {
+                console.log('🔴 No active tab found!');
+                return [];
+            }
+
+            const checkboxes = activeTab.querySelectorAll('.doc-select:checked');
+            console.log('🔵 Found checked boxes:', checkboxes.length);
+
+            const titles = Array.from(checkboxes).map(cb => cb.value);
+            console.log('🔵 Selected titles:', titles);
+            return titles;
         }
 
         async function estimateAndRunAnalysis(type, limit = 50) {
+            console.log('🔵 estimateAndRunAnalysis called with type:', type, 'limit:', limit);
             const analysisStatus = document.getElementById('analysisStatus');
             const selected = type === 'selected' ? getSelectedTitles() : [];
 
+            console.log('🔵 Analysis type:', type, 'Selected count:', selected.length);
+
             if (type === 'selected' && selected.length === 0) {
+                console.log('🔴 No documents selected!');
                 alert('Select at least one document to analyze.');
                 return;
             }
 
             analysisStatus.textContent = 'Estimating cost...';
+            console.log('🔵 Sending request to /analyze-documents...');
+
+            // Start polling to show live progress
+            startAnalysisPolling();
 
             try {
                 const payload = {
                     analysis_type: type,
                     limit: limit,
                     selected_titles: selected
-                }
+                };
 
-                    ;
+                console.log('🔵 Payload:', payload);
 
                 const response = await fetch('/analyze-documents', {
-
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
-                    }
-
-                    ,
+                    },
                     body: JSON.stringify(payload)
                 });
 
+                console.log('🔵 Response status:', response.status);
                 const data = await response.json();
+                console.log('🔵 Response data:', data);
 
                 if (data.status === 'budget_exceeded') {
+                    console.log('🔴 Budget exceeded:', data);
                     analysisStatus.textContent = `Budget exceeded. Estimated cost $${data.estimate?.total_cost?.toFixed(2) || 0}. Remaining $${data.budget?.remaining || 0}.`;
                     return;
                 }
 
                 if (data.status !== 'success') {
+                    console.log('🔴 Analysis failed:', data.message);
                     analysisStatus.textContent = data.message || 'Analysis failed.';
                     return;
                 }
 
+                console.log('✅ Analysis successful! Documents analyzed:', data.documents_analyzed);
                 const docLabel = data.documents_analyzed === 1 ? 'document' : 'documents';
                 const msg = `Analyzed ${data.documents_analyzed} ${docLabel}. Rendering results...`;
                 analysisStatus.innerHTML = `<div class="status-success"><strong>${msg}</strong></div>`;
@@ -1912,8 +2065,39 @@
             }
 
             catch (error) {
-                console.error('Analysis failed:', error);
+                console.error('🔴 Analysis failed:', error);
                 analysisStatus.textContent = 'Analysis failed. Check console.';
+            } finally {
+                // Stop any polling that was running
+                if (window.analysisPollingInterval) {
+                    clearInterval(window.analysisPollingInterval);
+                    window.analysisPollingInterval = null;
+                    console.log('🔵 Stopped analysis polling');
+                }
+            }
+        }
+
+        // Start polling for status updates during analysis
+        function startAnalysisPolling() {
+            console.log('🔵 Starting analysis status polling...');
+            // Clear any existing interval first
+            if (window.analysisPollingInterval) {
+                clearInterval(window.analysisPollingInterval);
+            }
+
+            // Poll every 3 seconds to refresh the document list
+            window.analysisPollingInterval = setInterval(async () => {
+                console.log('🔵 Polling for analysis status updates...');
+                await loadDocumentList();
+            }, 3000);
+        }
+
+        // Stop polling
+        function stopAnalysisPolling() {
+            if (window.analysisPollingInterval) {
+                clearInterval(window.analysisPollingInterval);
+                window.analysisPollingInterval = null;
+                console.log('🔵 Stopped analysis polling');
             }
         }
 
@@ -1973,6 +2157,7 @@
         async function verifyTagging() {
             const statusEl = document.getElementById('taggingStatus');
             const resultsEl = document.getElementById('taggingResults');
+            const hideV2 = document.getElementById('hideV2Checkbox') ? document.getElementById('hideV2Checkbox').checked : false;
 
             statusEl.textContent = 'Checking tagging status...';
             resultsEl.style.display = 'none';
@@ -2000,24 +2185,24 @@
                 }
 
                 // FILTER: Show documents that need Pass 2 (AI Tagging) or are processing
-                const todoDocs = data.documents.filter(doc => {
-                    // Need attention if:
-                    // 1. Pass 2 is truly 'Pending'
-                    // 2. OR it has 'Keywords' (Pass 1 complete) but NO ai_provider
-                    // 3. OR it is currently 'Processing'
-                    const status2 = String(doc.pass_2_status || '');
-                    const p2Pending = doc.pass_2_status === 'Pending';
-                    const keywordsOnly = doc.pass_1_status === 'Complete' && doc.pass_2_status === 'Pending';
-                    const processing = status2.toLowerCase().includes('processing');
-                    return p2Pending || keywordsOnly || processing;
-                });
+                // SHOW ALL: Show all documents to allow forced re-tagging (as requested by User)
+                // MODIFIED: Apply Hide V2 Filter
+                let todoDocs = data.documents;
+                if (hideV2) {
+                    todoDocs = data.documents.filter(doc => (doc.schema_version || 1) < 2);
+                }
+
+                const pendingCount = data.documents.filter(doc => (doc.pass_2_status === 'Pending' || String(doc.pass_2_status || '').toLowerCase().includes('processing'))).length;
+
+                const v2Count = data.documents.filter(d => (d.schema_version || 1) >= 2).length;
+                const legacyCount = data.total_documents - v2Count;
 
                 statusEl.innerHTML = `
-                <div style="display: flex; gap: 20px; align-items: center;">
-                    <span>✅ <strong>${data.total_documents}</strong> Total Documents</span>
-                    <span style="color: #d63031;"><strong>${todoDocs.length}</strong> Require Attention</span>
-                    <span style="color: #666;">•</span>
-                    <span style="color: #666;"><strong>${data.total_vectors.toLocaleString()}</strong> Vectors</span>
+                <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                    <span>✅ <strong>${data.total_documents}</strong> Total</span>
+                    <span style="color: #00b894;"><strong>${v2Count}</strong> V2 (High Perf)</span>
+                    <span style="color: #636e72;"><strong>${legacyCount}</strong> Legacy</span>
+                    <span style="color: #d63031;"><strong>${pendingCount}</strong> Need Process</span>
                 </div>
             `;
 
@@ -2042,6 +2227,7 @@
                             <th style="padding: 10px; border-bottom: 2px solid #ddd;">Chunks</th>
                             <th style="padding: 10px; border-bottom: 2px solid #ddd;">Pass 1 (Keywords)</th>
                             <th style="padding: 10px; border-bottom: 2px solid #ddd;">Pass 2 (AI Status)</th>
+                            <th style="padding: 10px; border-bottom: 2px solid #ddd;">Version</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2070,6 +2256,15 @@
 
                     const p2Badge = `<span style="padding: 3px 8px; border-radius: 4px; background: ${p2Color}; color: ${p2TextColor}; font-size: 0.8em;">${p2Text}</span>`;
 
+                    // Version Badge
+                    const version = doc.schema_version || 1;
+                    let vBadge = '';
+                    if (version >= 2) {
+                        vBadge = `<span style="padding: 3px 8px; border-radius: 4px; background: #00b894; color: white; font-size: 0.8em;">V2.0 (High Perf)</span>`;
+                    } else {
+                        vBadge = `<span style="padding: 3px 8px; border-radius: 4px; background: #b2bec3; color: white; font-size: 0.8em;">Legacy (V1)</span>`;
+                    }
+
                     tableHTML += `
                         <tr style="border-bottom: 1px solid #eee;">
                             <td style="padding: 10px; text-align: center;"><input type="checkbox" class="retag-select" value="${escapeHtml(doc.title)}"></td>
@@ -2077,6 +2272,7 @@
                             <td style="padding: 10px;">${doc.chunk_count}</td>
                             <td style="padding: 10px;">${p1Badge}</td>
                             <td style="padding: 10px;">${p2Badge}</td>
+                            <td style="padding: 10px;">${vBadge}</td>
                         </tr>
                         `;
                 });
@@ -2086,7 +2282,7 @@
                 // Add legend/info
                 tableHTML += `
                             <div style="margin-top: 15px; font-size: 0.85em; color: #666; text-align: right;">
-                                Showing ${todoDocs.length} documents requiring attention
+                                Showing ${todoDocs.length} documents
                     </div>
             `;
 
@@ -2166,24 +2362,36 @@
 
         // RETAG SELECTED DOCUMENTS
         async function retagSelectedDocuments(provider) {
+            console.log('🔵 retagSelectedDocuments called with provider:', provider);
             const statusEl = document.getElementById('taggingStatus');
 
             // Get checked boxes
             const checkboxes = document.querySelectorAll('.retag-select:checked');
+            console.log('🔵 Found checkboxes:', checkboxes.length);
+
             if (checkboxes.length === 0) {
+                console.log('🔴 No checkboxes selected!');
                 alert('Please check the boxes next to the documents you want to re-tag.');
                 return;
             }
 
             const selectedTitles = Array.from(checkboxes).map(cb => cb.value);
+            console.log('🔵 Selected titles:', selectedTitles);
+
             const providerName = provider === 'ollama' ? 'Ollama' : 'OpenAI';
             const costWarning = provider === 'openai' ? `\nCost: ~$0.04 per 100 docs` : '';
 
-            if (!confirm(`Re - tag ${selectedTitles.length} documents with ${providerName}?${costWarning} `)) {
+            console.log('🔵 Showing confirmation dialog...');
+            const confirmed = confirm(`Re-tag ${selectedTitles.length} documents with ${providerName}?${costWarning}`);
+            console.log('🔵 User confirmed:', confirmed);
+
+            if (!confirmed) {
+                console.log('🔴 User canceled the operation');
                 return;
             }
 
             statusEl.textContent = `Queueing ${selectedTitles.length} docs for ${providerName} tagging...`;
+            console.log('🔵 Sending request to /retag-documents...');
 
             try {
                 const response = await fetch('/retag-documents', {
@@ -2197,17 +2405,26 @@
                     })
                 });
 
+                console.log('🔵 Response status:', response.status);
                 const data = await response.json();
+                console.log('🔵 Response data:', data);
 
                 if (data.status === 'success') {
-                    statusEl.textContent = `✅ Started background process for ${selectedTitles.length} documents.`;
-                    // Refresh verification in 5 seconds to show updates
-                    setTimeout(() => verifyTagging(), 5000);
+                    statusEl.textContent = `✅ Started background process for ${selectedTitles.length} documents. Check 'Status' tab.`;
+                    console.log('✅ Success! Switching to Status tab...');
+
+                    // Switch to Status tab and start polling
+                    switchTab('status');
+                    startStatusPolling();
+
+                    // Also refresh verification list after a short delay
+                    setTimeout(() => verifyTagging(), 2000);
                 } else {
-                    statusEl.textContent = `Failed: ${data.message} `;
+                    statusEl.textContent = `Failed: ${data.message}`;
+                    console.log('🔴 Failed:', data.message);
                 }
             } catch (error) {
-                console.error('Selective re-tag failed:', error);
+                console.error('🔴 Selective re-tag failed:', error);
                 statusEl.textContent = 'Request failed. Check console.';
             }
         }
@@ -2508,6 +2725,63 @@
                 alert('❌ Upgrade failed. Check console.');
             }
         }
+
+        // Status Polling Logic
+        let statusPollInterval = null;
+
+        function startStatusPolling() {
+            if (statusPollInterval) return;
+            statusPollInterval = setInterval(updateRetagStatus, 5000);
+            updateRetagStatus(); // Initial call
+        }
+
+        function stopAnalysisPolling() {
+            if (statusPollInterval) {
+                clearInterval(statusPollInterval);
+                statusPollInterval = null;
+                document.getElementById('systemStatus').textContent = "Polling stopped.";
+            }
+        }
+
+        async function updateRetagStatus() {
+            try {
+                const response = await fetch('/retag-status');
+                const status = await response.json();
+
+                const progressFill = document.getElementById('retagProgressFill');
+                const progressText = document.getElementById('retagProgressText');
+                const systemStatus = document.getElementById('systemStatus');
+
+                if (status.total_documents > 0) {
+                    const percent = Math.round((status.processed_documents / status.total_documents) * 100);
+                    progressFill.style.width = percent + '%';
+                    progressText.textContent = `${status.processed_documents} / ${status.total_documents} Documents Processed (Status: ${status.status})`;
+                } else {
+                    progressFill.style.width = '0%';
+                    progressText.textContent = "No active job.";
+                }
+
+                systemStatus.textContent = `Job Status: ${status.status.toUpperCase()}`;
+
+                if (status.status === 'error') {
+                    systemStatus.textContent += ` - Error: ${status.error}`;
+                    systemStatus.style.color = 'red';
+                }
+
+            } catch (error) {
+                console.error("Polling error:", error);
+            }
+        }
+
+        // Start polling when Status tab is active
+        const originalSwitchTab = switchTab;
+        switchTab = function (tabName, event) {
+            originalSwitchTab(tabName, event);
+            if (tabName === 'status') {
+                startStatusPolling();
+            }
+        };
+
     </script>
 </body>
 

@@ -29,8 +29,34 @@ def init_db():
         conn.commit()
         conn.close()
         logger.info("Database initialized successfully")
+        
+        # Run Migration immediately after init
+        migrate_db_v2()
+        
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
+
+def migrate_db_v2():
+    """Add schema_version column if it doesn't exist"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Check if column exists
+        cursor.execute("PRAGMA table_info(documents)")
+        columns = [info[1] for info in cursor.fetchall()]
+        
+        if "schema_version" not in columns:
+            logger.info("Migrating database to V2 (Adding schema_version)...")
+            cursor.execute("ALTER TABLE documents ADD COLUMN schema_version INTEGER DEFAULT 1")
+            conn.commit()
+            logger.info("Migration successful: schema_version added")
+        else:
+            logger.info("Database already at V2 schema")
+            
+        conn.close()
+    except Exception as e:
+        logger.error(f"Migration V2 failed: {e}")
 
 def add_document(title, chunk_count, has_keyword_tags=False):
     """Add or update a document"""
@@ -51,7 +77,7 @@ def add_document(title, chunk_count, has_keyword_tags=False):
     except Exception as e:
         logger.error(f"Failed to add document {title}: {e}")
 
-def update_status(title, status, ai_provider=None):
+def update_status(title, status, ai_provider=None, schema_version=None):
     """Update document status"""
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -61,17 +87,40 @@ def update_status(title, status, ai_provider=None):
         params = [status, title]
         
         if ai_provider:
+            # Check if this is a V2 update (re-tagging)
             updates.insert(0, "ai_provider = ?")
             params.insert(0, ai_provider)
             
-        # Re-order params: val, [val], title
-        query = f"UPDATE documents SET {', '.join(updates)} WHERE title = ?"
+        if schema_version is not None:
+            updates.insert(0, "schema_version = ?")
+            params.insert(0, schema_version)
+            
+        # Params need to be: [val1, val2, ..., status, title]
+        # Current params list logic is a bit flipped in original code, fixing it here:
+        # We need: values for SET clause... then title for WHERE clause
         
-        # Fix param order for the query
-        # If ai_provider: [ai_provider, status, title]
-        # Else: [status, title]
-        sql_params = [ai_provider, status, title] if ai_provider else [status, title]
-
+        # Reset params construction to be cleaner
+        set_values = []
+        sql_params = []
+        
+        if schema_version is not None:
+            set_values.append("schema_version = ?")
+            sql_params.append(schema_version)
+            
+        if ai_provider:
+            set_values.append("ai_provider = ?")
+            sql_params.append(ai_provider)
+            
+        set_values.append("status = ?")
+        sql_params.append(status)
+        
+        set_values.append("last_updated = CURRENT_TIMESTAMP")
+        
+        # Add WHERE param
+        sql_params.append(title)
+        
+        query = f"UPDATE documents SET {', '.join(set_values)} WHERE title = ?"
+        
         cursor.execute(query, sql_params)
         conn.commit()
         conn.close()
@@ -133,3 +182,15 @@ def get_document_by_title(title):
     except Exception as e:
         logger.error(f"Failed to get document by title {title}: {e}")
         return None
+
+def delete_document(title):
+    """Delete a document by title"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM documents WHERE title = ?", (title,))
+        conn.commit()
+        conn.close()
+        logger.info(f"Deleted document from SQLite: {title}")
+    except Exception as e:
+        logger.error(f"Failed to delete document {title}: {e}")

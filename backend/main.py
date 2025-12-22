@@ -58,7 +58,7 @@ spending_tracker = SpendingTracker()
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "evolve-consciousness")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
-CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1800"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 PINECONE_DIMENSION = int(os.getenv("PINECONE_DIMENSION", "1536"))
 
@@ -66,7 +66,18 @@ PINECONE_DIMENSION = int(os.getenv("PINECONE_DIMENSION", "1536"))
 import database
 
 # Background Sync Status
-SYNC_STATUS = "idle" 
+SYNC_STATUS = "idle"
+
+# Global re‑tagging progress tracking
+RETAG_STATUS = {
+    "total_documents": 0,
+    "processed_documents": 0,
+    "status": "idle",  # idle | running | completed | error
+    "error": None,
+}
+
+# Existing SYNC_STATUS remains for database sync
+
 
 async def sync_database_with_pinecone():
     """
@@ -636,7 +647,7 @@ async def upload_document(request: UploadRequest):
         logger.info(f"Created {total_chunks} chunks")
 
         # Process in batches to handle large documents
-        BATCH_SIZE = 50  # Process 50 chunks at a time
+        BATCH_SIZE = 20  # Reduced from 50 to prevent Pinecone 429 errors
         total_uploaded = 0
 
         for batch_start in range(0, total_chunks, BATCH_SIZE):
@@ -644,6 +655,10 @@ async def upload_document(request: UploadRequest):
             batch_chunks = chunks[batch_start:batch_end]
 
             logger.info(f"Processing batch {batch_start}-{batch_end} of {total_chunks}")
+            
+            # Rate limiting pause between batches
+            if total_uploaded > 0:
+                await asyncio.sleep(0.5)
 
             vectors_to_upsert = []
 
@@ -752,7 +767,15 @@ async def upload_document(request: UploadRequest):
                     logger.error(f"Error upserting batch: {upsert_error}")
                     raise HTTPException(status_code=500, detail=f"Failed to upload batch: {str(upsert_error)}")
 
-        logger.info(f"Successfully uploaded {total_uploaded} vectors")
+        if total_uploaded > 0:
+             # Add to local SQLite database so it appears in UI
+             # Use tags from the last batch as proxy for "has tags"
+             has_tags = False
+             if 'tags' in locals() and isinstance(tags, dict):
+                 has_tags = bool(tags.get("tags"))
+             
+             database.add_document(request.title, total_chunks, has_tags)
+             logger.info(f"Added {request.title} to local SQLite database")
 
         return {
             "status": "success",
@@ -1123,7 +1146,8 @@ async def get_document_status():
             "pass_1_status": "Complete" if d['has_keyword_tags'] else "Pending",
             "pass_2_status": d['ai_provider'] if d['ai_provider'] else "Pending",
             "pass_3_status": "Complete" if d['status'] == 'analyzed' else "Pending",
-            "raw_providers": [d['ai_provider']] if d['ai_provider'] else []
+            "raw_providers": [d['ai_provider']] if d['ai_provider'] else [],
+            "schema_version": d.get('schema_version', 1)
         })
         
     return {
@@ -1185,6 +1209,11 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
     """
     try:
         total_docs = len(document_titles_to_process)
+        # Initialize RETAG_STATUS tracking
+        RETAG_STATUS["total_documents"] = total_docs
+        RETAG_STATUS["processed_documents"] = 0
+        RETAG_STATUS["status"] = "running"
+        RETAG_STATUS["error"] = None
         logger.info(f"Background Tagging Started: {total_docs} documents using {ai_provider}")
         
         processed_chunks = 0
@@ -1194,6 +1223,7 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
         # Main Loop: Process one document at a time
         for title in document_titles_to_process:
             database.update_status(title, "processing", ai_provider.upper())
+            RETAG_STATUS["processed_documents"] += 1
             try:
                 # Get chunks for THIS document
                 query_vector = [0.0] * PINECONE_DIMENSION
@@ -1252,11 +1282,26 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
                             # This stays comfortably under most Tier 1 limits
                             await asyncio.sleep(5.0) 
                             
-                            batch_results = await tagging.generate_tags_batch_openai(
+                            batch_results, usage_stats = await tagging.generate_tags_batch_openai(
                                 valid_texts, 
                                 openai_client, 
                                 timeout=60.0
                             )
+
+                            # Record OpenAI spending
+                            if usage_stats.get("total_cost", 0) > 0:
+                                spending_tracker.record_analysis({
+                                    "analysis_type": "openai_tagging",
+                                    "document_count": 0, # It's chunks, not full docs technically, but we track at chunk level here
+                                    "chunk_count": len(valid_texts),
+                                    "input_tokens": usage_stats.get("input_tokens", 0),
+                                    "output_tokens": usage_stats.get("output_tokens", 0),
+                                    "total_cost": usage_stats.get("total_cost", 0),
+                                    "input_cost": usage_stats.get("input_cost", 0),
+                                    "output_cost": usage_stats.get("output_cost", 0),
+                                    "batch_count": 1,
+                                    "duration_seconds": 0
+                                })
                         
                         # Process results back into vectors
                         batch_vectors_to_update = []
@@ -1324,21 +1369,37 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
                 current_docs = database.get_documents()
                 current_doc = next((d for d in current_docs if d['title'] == title), None)
                 final_status = "tagged"
-                if current_doc and current_doc.get('status') == 'analyzed':
-                    final_status = "analyzed"
+                # Force status to 'tagged' so it re-appears in "Analyze Pending" queue
+                # This meets the user's requirement to "send it back through analysis"
+                # STAMP WITH V2: Mark as Schema Version 2 (High Performance)
+                final_status = "tagged"
                 
-                database.update_status(title, final_status, ai_provider.upper())
-                logger.info(f"Retagged {title}: {len(matches)} chunks (Final Status: {final_status})")
+                database.update_status(title, final_status, ai_provider.upper(), schema_version=2)
+                logger.info(f"Retagged {title}: {len(matches)} chunks (Final Status: {final_status}, Schema: V2)")
                 
             except Exception as e:
-                 logger.error(f"Failed to process document {title}: {e}")
-                 database.update_status(title, "error", ai_provider.upper())
+                logger.error(f"Failed to process document {title}: {e}")
+                database.update_status(title, "error", ai_provider.upper())
+                RETAG_STATUS["status"] = "error"
+                RETAG_STATUS["error"] = str(e)
+                # Continue to next document instead of crashing the whol task
+                continue
                 
         logger.info(f"Re-tagging complete: {total_docs} docs, {updated_chunks} chunks updated")
+        RETAG_STATUS["status"] = "completed"
+        # Reset to idle after a short delay to allow new jobs
+        await asyncio.sleep(5)
+        RETAG_STATUS["status"] = "idle"
 
     except Exception as e:
         logger.error(f"Background tagging task CRITICAL FAILURE: {e}")
 
+
+
+@app.get("/retag-status")
+async def get_retag_status():
+    """Return current re‑tagging progress status."""
+    return RETAG_STATUS
 
 @app.post("/retag-documents")
 async def retag_documents(request: RetagRequest, background_tasks: BackgroundTasks):
@@ -1348,6 +1409,7 @@ async def retag_documents(request: RetagRequest, background_tasks: BackgroundTas
     """
     try:
         ai_provider = request.ai_provider or "ollama"
+
         ollama_model = request.ollama_model or "llama3.1"
         batch_size = request.batch_size or 50
         
@@ -1411,29 +1473,37 @@ async def delete_document(title: str):
             timeout=30.0
         )
 
-        # Collect all IDs to delete
-        ids_to_delete = [match.id for match in results.matches]
+        ids_to_delete = [] # Initialize ids_to_delete
+        if not results.matches:
+            logger.info("No chunks found in Pinecone to delete")
+        else:
+            ids_to_delete = [m.id for m in results.matches]
+            logger.info(f"Found {len(ids_to_delete)} chunks to delete for title: {title}")
+            
+            # Batch delete (Pinecone has a limit of 1000 IDs per request)
+            BATCH_SIZE = 1000
+            for i in range(0, len(ids_to_delete), BATCH_SIZE):
+                batch_ids = ids_to_delete[i:i + BATCH_SIZE]
+                await pinecone_with_retry(
+                    lambda: index.delete(ids=batch_ids),
+                    max_retries=3,
+                    timeout=30.0
+                )
+                logger.info(f"Deleted batch {i//BATCH_SIZE + 1} ({len(batch_ids)} chunks)")
 
-        if not ids_to_delete:
-            return {
-                "status": "success",
-                "message": f"No chunks found for '{title}'",
-                "chunks_deleted": 0
-            }
+        # Also remove from SQLite
+        database.delete_document(title)
+        
+        # Remove from in-memory status
+        if title in RETAG_STATUS:
+             pass # Simple cleanup if needed
 
-        # Delete all chunks
-        await pinecone_with_retry(
-            lambda: index.delete(ids=ids_to_delete),
-            max_retries=3,
-            timeout=15.0
-        )
-
-        logger.info(f"Deleted {len(ids_to_delete)} chunks of document '{title}'")
+        logger.info(f"Deleted {len(ids_to_delete) if 'ids_to_delete' in locals() else 0} chunks of document '{title}'")
 
         return {
             "status": "success",
-            "message": f"Deleted {len(ids_to_delete)} chunks of '{title}'",
-            "chunks_deleted": len(ids_to_delete)
+            "message": f"Deleted {len(ids_to_delete) if 'ids_to_delete' in locals() else 0} chunks of '{title}'",
+            "chunks_deleted": len(ids_to_delete) if 'ids_to_delete' in locals() else 0
         }
 
     except asyncio.TimeoutError:
@@ -1460,6 +1530,7 @@ async def get_spending_dashboard(month: Optional[str] = None):
     try:
         stats = spending_tracker.get_monthly_stats(month)
         history = spending_tracker.get_monthly_history(month)
+        breakdown = spending_tracker.get_spending_breakdown(month)
 
         # Calculate estimated pages from tokens
         total_pages = round(stats['total_input_tokens'] / 650) if stats['total_input_tokens'] else 0
@@ -1468,6 +1539,7 @@ async def get_spending_dashboard(month: Optional[str] = None):
             "status": "success",
             "stats": {
                 **stats,
+                "breakdown": breakdown,
                 "estimated_pages_analyzed": total_pages,
                 "remaining_budget": round(stats['monthly_cap'] - stats['total_cost'], 2),
                 "budget_used_percentage": round(
@@ -1639,6 +1711,21 @@ async def analyze_documents(request: AnalyzeRequest):
                 timeout=30.0
             )
             matches = results.matches
+        elif analysis_type == "pending":
+            # Fetch specifically documents that are NOT complete
+            results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=query_vector,
+                    top_k=10000,
+                    filter={
+                        "pass_3_status": {"$ne": "Complete"}
+                    },
+                    include_metadata=True
+                ),
+                max_retries=2,
+                timeout=60.0
+            )
+            matches = results.matches
         elif analysis_type == "theme":
             results = await pinecone_with_retry(
                 lambda: index.query(
@@ -1674,15 +1761,49 @@ async def analyze_documents(request: AnalyzeRequest):
         else:
             raise HTTPException(status_code=400, detail="Invalid analysis_type")
 
-        documents = [
-            {
-                "id": match.id,
-                "text": match.metadata.get("text", ""),
-                "tags": match.metadata.get("tags", []),
-                "title": match.metadata.get("title", "Unknown")
-            }
-            for match in matches if match and getattr(match, "metadata", None)
-        ]
+        # AGGREGATION LOGIC
+        # Group chunks by title and aggregate their tags to create a full document profile
+        unique_matches_map = {}
+        
+        for match in matches:
+            if match and hasattr(match, "metadata") and match.metadata:
+                title = match.metadata.get("title", "Unknown")
+                if title == "Unknown":
+                    continue
+                    
+                if title not in unique_matches_map:
+                    # Initialize 
+                    unique_matches_map[title] = {
+                        "id": title, 
+                        "text_chunks": [], # Store chunks to sort later
+                        "tags": set(match.metadata.get("tags", [])), 
+                        "title": title
+                    }
+                
+                # Always add text and tags
+                # Use chunk_index if available, otherwise just append
+                chunk_text = match.metadata.get("text", "")
+                chunk_idx = match.metadata.get("chunk_index", 0) # Assumes numeric index
+                unique_matches_map[title]["text_chunks"].append((chunk_idx, chunk_text))
+                
+                existing_tags = unique_matches_map[title]["tags"]
+                new_tags = match.metadata.get("tags", [])
+                existing_tags.update(new_tags)
+        
+        # Reconstruct full text and finalize documents
+        documents = []
+        for doc_data in unique_matches_map.values():
+            # Sort chunks by index to reconstruct reading order
+            sorted_chunks = sorted(doc_data["text_chunks"], key=lambda x: x[0])
+            full_text = "\n".join([c[1] for c in sorted_chunks])
+            
+            doc_data["text"] = full_text
+            doc_data["tags"] = list(doc_data["tags"])
+            del doc_data["text_chunks"] # Cleanup
+            
+            documents.append(doc_data)
+            
+        logger.info(f"Aggregated {len(documents)} unique documents for analysis")
 
         if not documents:
             return {
@@ -1691,8 +1812,10 @@ async def analyze_documents(request: AnalyzeRequest):
                 "documents_found": 0
             }
 
-        # Estimate cost using existing estimator
-        estimate = estimate_claude_cost([{"metadata": m.metadata} for m in matches], batch_size=15)
+        # Estimate cost using aggregated documents to be accurate
+        # We reconstruct a mock 'match' structure for the estimator
+        mock_matches_for_est = [{"metadata": {"text": d["text"], "tags": d["tags"]}} for d in documents]
+        estimate = estimate_claude_cost(mock_matches_for_est, batch_size=15)
 
         budget_ok = spending_tracker.can_afford(estimate.get("total_cost", 0))
         if not budget_ok.get("can_afford", True):
@@ -1703,11 +1826,23 @@ async def analyze_documents(request: AnalyzeRequest):
             }
 
         # Run analysis in batches of 15 documents
+        # Run analysis in batches of 15 documents
         batch_size = 15
         batch_results = []
+        unique_titles = set()
+        
         for start in range(0, len(documents), batch_size):
             batch_docs = documents[start:start + batch_size]
             analysis = claude_second_pass_analysis(batch_docs, batch_size=batch_size)
+            
+            # Update status IMMEDIATELY for this batch so UI updates live
+            for doc in batch_docs:
+                title = doc.get("title", "Unknown")
+                if title != "Unknown":
+                    unique_titles.add(title)
+                    logger.info(f"Marking document as analyzed: {title}")
+                    database.update_status(title, "analyzed")
+            
             batch_results.append({
                 "batch_start": start,
                 "batch_end": start + len(batch_docs) - 1,
@@ -1724,14 +1859,7 @@ async def analyze_documents(request: AnalyzeRequest):
             "output_tokens": estimate.get("total_output_tokens", 0)
         })
 
-        # Update DB status for analyzed documents
-        unique_titles = set()
-        for doc in documents:
-            title = doc.get("title", "Unknown")
-            if title != "Unknown":
-                unique_titles.add(title)
-                logger.info(f"Marking document as analyzed: {title}")
-                database.update_status(title, "analyzed")
+        # (Status update loop removed from here as it's done incrementally above)
 
         return {
             "status": "success",

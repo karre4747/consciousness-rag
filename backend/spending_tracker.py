@@ -230,3 +230,41 @@ class SpendingTracker:
             "total_cost": round(row[4] or 0, 2),
             "monthly_cap": self.get_monthly_cap()
         }
+    def get_spending_breakdown(self, month: Optional[str] = None) -> Dict[str, float]:
+        """Get spending breakdown by analysis type"""
+        if not month:
+            month = date.today().strftime("%Y-%m")
+
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                SELECT 
+                    analysis_type, 
+                    SUM(total_cost) 
+                FROM spending_history 
+                WHERE strftime('%Y-%m', timestamp) = ?
+                GROUP BY analysis_type
+            ''', (month,))
+
+            rows = cursor.fetchall()
+        
+        # Normalize keys
+        breakdown = {
+            "claude": 0.0,
+            "openai": 0.0,
+            "total": 0.0
+        }
+        
+        for row in rows:
+            antype = row[0]
+            cost = row[1] or 0.0
+            breakdown["total"] += cost
+            
+            if antype in ['openai_tagging', 'openai']:
+                breakdown["openai"] += cost
+            else:
+                # Assume everything else is Claude (recent, full, theme, selected)
+                breakdown["claude"] += cost
+                
+        return {k: round(v, 2) for k, v in breakdown.items()}

@@ -351,15 +351,15 @@ def generate_tags_ollama(text: str, model: str = "llama3.1") -> Dict[str, Any]:
 
     prompt = f"""Analyze this consciousness/spiritual text and identify relevant tags.
 
-Text (first 1500 chars):
-{text[:1500]}
+Text:
+{text}
 
 Return ONLY valid JSON with these fields:
-{{
+{
   "tags": ["chakra_heart", "quantum_physics", "step_1", "photon_consciousness", "moksha", etc],
   "primary_theme": "one sentence summary",
   "consciousness_level": "shame|fear|courage|acceptance|love|peace|enlightenment"
-}}
+}
 
 Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies"""
 
@@ -428,15 +428,15 @@ async def generate_tags_openai(text: str, openai_client, max_tokens: int = 300, 
 
     prompt = f"""Analyze this consciousness/spiritual text and identify relevant tags.
 
-Text (first 1500 chars):
-{text[:1500]}
+Text:
+{text}
 
 Return ONLY valid JSON with these fields:
-{{
+{
   "tags": ["chakra_heart", "quantum_physics", "step_1", "photon_consciousness", "moksha", etc],
   "primary_theme": "one sentence summary",
   "consciousness_level": "shame|fear|courage|acceptance|love|peace|enlightenment"
-}}
+}
 
 Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies, astrology (planets/zodiac_signs)"""
 
@@ -603,10 +603,11 @@ def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int
         Dict with enhanced semantic connections and relationships
     """
 
-    # Build context from limited batch to control token use
+    # Build context with FULL TEXT (up to reasonable safety limit per doc to allow batching)
+    # 200k tokens ~= 800k chars. If batch is 5 docs, each can have ~100k chars safe.
     limited_docs = documents[:batch_size]
     context = "\n\n---\n\n".join([
-        f"DOC {i+1} [{doc.get('id')}]:\n{doc.get('text', '')[:500]}...\nCurrent tags: {doc.get('tags', [])}"
+        f"DOC {i+1} [{doc.get('id')}]:\n{doc.get('text', '')[:100000]}...\nALL Tags: {doc.get('tags', [])}"
         for i, doc in enumerate(limited_docs)
     ])
 
@@ -658,20 +659,25 @@ Return JSON:
     except Exception as e:
         return {"error": f"Claude analysis failed: {str(e)}"}
 
-async def generate_tags_batch_openai(texts: List[str], openai_client, max_tokens: int = 1500, timeout: float = 30.0) -> List[Dict[str, Any]]:
+async def generate_tags_batch_openai(texts: List[str], openai_client, max_tokens: int = 1500, timeout: float = 30.0) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """
     Batch processing for OpenAI tagging to reduce API calls.
     Processes up to 5-10 chunks in a single request.
+    Returns: (results_list, usage_stats)
     """
     import asyncio
     import json
     import random
     from openai import OpenAIError, RateLimitError, APITimeoutError, APIConnectionError
 
+    # GPT-3.5 Turbo Pricing
+    COST_INPUT_PER_1M = 0.50
+    COST_OUTPUT_PER_1M = 1.50
+
     # Construct batch prompt
     combined_text = ""
     for i, text in enumerate(texts):
-        combined_text += f"\n--- CHUNK {i+1} ---\n{text[:1000]}...\n"
+        combined_text += f"\n--- CHUNK {i+1} ---\n{text}\n"
 
     prompt = f"""You are a tagging engine. Analyze the following {len(texts)} text chunks. 
 For EACH chunk, identify relevant tags, themes, and consciousness levels.
@@ -695,9 +701,9 @@ Return a valid JSON OBJECT with a key "results" which is a LIST of objects, one 
 Categories to detect: chakras, recovery_principles, consciousness_levels, traditions, quantum_concepts.
 """
 
-    max_retries = 3
-    base_delay = 2
-    max_delay = 45
+    max_retries = 5
+    base_delay = 4
+    max_delay = 60
 
     def _call_openai():
         return openai_client.chat.completions.create(
@@ -715,6 +721,22 @@ Categories to detect: chakras, recovery_principles, consciousness_levels, tradit
             )
             response_text = response.choices[0].message.content
             
+            # Calculate Usage
+            usage = response.usage
+            input_tokens = usage.prompt_tokens
+            output_tokens = usage.completion_tokens
+            input_cost = (input_tokens / 1_000_000) * COST_INPUT_PER_1M
+            output_cost = (output_tokens / 1_000_000) * COST_OUTPUT_PER_1M
+            total_cost = input_cost + output_cost
+            
+            usage_stats = {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "input_cost": input_cost,
+                "output_cost": output_cost,
+                "total_cost": total_cost 
+            }
+
             try:
                 # Clean up json if markdown block
                 if "```json" in response_text:
@@ -729,14 +751,14 @@ Categories to detect: chakras, recovery_principles, consciousness_levels, tradit
                 while len(results) < len(texts):
                     results.append({})
                     
-                return results
+                return results, usage_stats
                 
             except json.JSONDecodeError:
                 # Fallback: return empty dicts to trigger keyword fallback
-                return [{} for _ in texts]
+                return [{} for _ in texts], {"total_cost": 0, "input_tokens": 0, "output_tokens": 0}
 
         except (RateLimitError, APIConnectionError) as e:
-            if attempt == max_retries - 1: return [{} for _ in texts]
+            if attempt == max_retries - 1: return [{} for _ in texts], {"total_cost": 0}
             delay = min(base_delay * (2 ** attempt), max_delay)
             # Add jitter
             delay += random.uniform(0, 1)
@@ -745,6 +767,7 @@ Categories to detect: chakras, recovery_principles, consciousness_levels, tradit
             
         except Exception as e:
             print(f"Batch OpenAI error: {e}")
-            return [{} for _ in texts]
+            return [{} for _ in texts], {"total_cost": 0}
 
-    return [{} for _ in texts]
+    return [{} for _ in texts], {"total_cost": 0}
+
