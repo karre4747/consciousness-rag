@@ -25,7 +25,7 @@ def trigger_analysis():
     url = "http://localhost:8001/analyze-documents"
     payload = {
         "analysis_type": "selected",
-        "selected_titles": titles,
+        "selected_titles": titles[:100],  # Explicitly respect limit
         "limit": 100
     }
 
