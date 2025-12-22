@@ -1501,7 +1501,7 @@ async def delete_document(title: str):
             "message": f"Deleted {len(ids_to_delete)} chunks of '{title}'",
             "chunks_deleted": len(ids_to_delete)
         }
-        }
+
 
     except asyncio.TimeoutError:
         logger.error(f"Delete timed out for '{title}'")

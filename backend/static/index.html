@@ -2218,9 +2218,8 @@
                     return;
                 }
 
-                // Build Table for Todo Items
                 let tableHTML = `
-            < div style = "overflow-x: auto; margin-top: 15px;" >
+                <div style="overflow-x: auto; margin-top: 15px;">
                 <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
                     <thead>
                         <tr style="background: #f8f9fa; text-align: left;">
@@ -2605,21 +2604,21 @@
                 // Add all_traditions tags
                 if (metadata.all_traditions && metadata.all_traditions.length > 0) {
                     metadata.all_traditions.forEach(tradition => {
-                        metadataTags += `< span class="metadata-tag" >🕉️ ${escapeHtml(tradition)}</span > `;
+                        metadataTags += `<span class="metadata-tag">🕉️ ${escapeHtml(tradition)}</span> `;
                     });
                 }
 
                 // Add all_teachers tags
                 if (metadata.all_teachers && metadata.all_teachers.length > 0) {
                     metadata.all_teachers.forEach(teacher => {
-                        metadataTags += `< span class="metadata-tag" >👤 ${escapeHtml(teacher)}</span > `;
+                        metadataTags += `<span class="metadata-tag">👤 ${escapeHtml(teacher)}</span> `;
                     });
                 }
 
                 // Add all_chakras tags
                 if (metadata.all_chakras && metadata.all_chakras.length > 0) {
                     metadata.all_chakras.forEach(chakra => {
-                        metadataTags += `< span class="metadata-tag" >⚡ ${escapeHtml(chakra)}</span > `;
+                        metadataTags += `<span class="metadata-tag">⚡ ${escapeHtml(chakra)}</span> `;
                     });
                 }
 
@@ -2629,12 +2628,12 @@
                         const value = metadata[key];
 
                         if (value && typeof value === 'string') {
-                            metadataTags += `< span class="metadata-tag" >🏷️ ${escapeHtml(key)}: ${escapeHtml(value)}</span > `;
+                            metadataTags += `<span class="metadata-tag">🏷️ ${escapeHtml(key)}: ${escapeHtml(value)}</span> `;
                         }
 
                         else if (Array.isArray(value) && value.length > 0) {
                             value.forEach(item => {
-                                metadataTags += `< span class="metadata-tag" >🏷️ ${escapeHtml(key)}: ${escapeHtml(item)}</span > `;
+                                metadataTags += `<span class="metadata-tag">🏷️ ${escapeHtml(key)}: ${escapeHtml(item)}</span> `;
                             });
                         }
                     }
@@ -2642,11 +2641,11 @@
             }
 
             return `
-            < div class="source-card" >
+            <div class="source-card">
                     <div class="source-title">${index}. ${escapeHtml(source.title || 'Untitled Document')}</div>
                     <div class="source-excerpt">"${escapeHtml(excerpt)}"</div>
                     ${metadataTags ? `<div class="source-metadata">${metadataTags}</div>` : ''}
-                </div >
+                </div>
             `;
         }
 
@@ -2656,7 +2655,7 @@
         function showError(message) {
             const errorMessage = document.getElementById('errorMessage');
 
-            errorMessage.innerHTML = `< div class="error-message" >⚠️ ${escapeHtml(message)}</div >`;
+            errorMessage.innerHTML = `<div class="error-message">⚠️ ${escapeHtml(message)}</div>`;
         }
 
         // Helper to toggle all checkboxes

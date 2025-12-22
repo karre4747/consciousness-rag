@@ -453,6 +453,7 @@ Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), 
     base_delay = 1
     max_delay = 30
 
+    def _call_openai():
         """Synchronous OpenAI API call"""
         return openai_client.chat.completions.create(
             model="gpt-4o-mini",
