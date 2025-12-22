@@ -29,15 +29,13 @@ def test_upload():
         start = time.time()
         print("Sending upload request...")
         resp = requests.post(f"{BASE_URL}/upload", json=payload, timeout=30)
-        print(f"Upload Response ({time.time() - start:.2f}s): {resp.status_code}")
-        print(resp.text)
         if resp.status_code == 200:
             print("\nChecking /document-status...")
             time.sleep(1)
-            status_resp = requests.get(f"{BASE_URL}/document-status")
+            status_resp = requests.get(f"{BASE_URL}/document-status", timeout=5)
             print(f"Status Response: {status_resp.status_code}")
             docs = status_resp.json().get("documents", [])
-            found = any(d['title'] == "Test Document Alpha" for d in docs)
+            found = any(d.get('title') == "Test Document Alpha" for d in docs)
             print(f"Document found in status list: {found}")
             print("Documents list:", docs)
             
