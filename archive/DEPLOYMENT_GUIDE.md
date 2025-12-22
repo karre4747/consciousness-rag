@@ -340,7 +340,29 @@ curl http://localhost:8000/stats
 
 ---
 
-## 🔧 API Endpoints Reference
+## 🔧 API Endpoints & Security Reference
+
+### 🛡️ Authentication & Security (CRITICAL)
+
+**Production deployments MUST implement:**
+1.  **API Key Authentication**: Require `X-API-Key` header for ALL endpoints.
+2.  **Role-Based Access Control (RBAC)**:
+    -   `ReadOnly` keys for `/query`
+    -   `Admin` keys for `/upload` and `/delete`
+3.  **Rate Limiting**:
+    -   **Global**: 60 requests/minute/IP
+    -   **Uploads**: 10 requests/minute (prevent vector spam)
+    -   **Response**: Return `429 Too Many Requests` with `Retry-After` header.
+
+### **Security Migration Checklist**
+- [ ] Generate secure API keys (e.g., `openssl rand -hex 32`)
+- [ ] Configure RBAC middleware (verify keys against stored hash)
+- [ ] Enable Nginx Rate Limiting (`limit_req_zone`)
+- [ ] Rotate keys quarterly
+
+---
+
+### **GET /**
 
 ### **GET /**
 Health check - returns service status
@@ -352,6 +374,8 @@ Detailed health check with Pinecone stats
 Database statistics (total vectors, namespaces)
 
 ### **POST /upload**
+**Security**: `Admin` Key Required. Rate limit: 10/min.
+
 Upload and process a document
 
 **Request Body:**
@@ -364,6 +388,10 @@ Upload and process a document
   "use_ai_tagging": false
 }
 ```
+
+**Required Headers:**
+- `X-API-Key`: `<Your-Admin-Key>`
+
 
 **Response:**
 ```json
