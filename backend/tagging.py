@@ -684,10 +684,21 @@ async def generate_tags_batch_openai(texts: List[str], openai_client, max_tokens
     COST_INPUT_PER_1M = 0.15
     COST_OUTPUT_PER_1M = 0.60
 
-    # Construct batch prompt
+    MAX_CHUNK_CHARS = 10000 
+    MAX_TOTAL_CHARS = 100000 # Leave room for system prompt + output
+
+    # Construct batch prompt with safety limits
     combined_text = ""
     for i, text in enumerate(texts):
-        combined_text += f"\n--- CHUNK {i+1} ---\n{text}\n"
+        # Truncate individual chunk if needed
+        clean_text = text[:MAX_CHUNK_CHARS] + "... (truncated)" if len(text) > MAX_CHUNK_CHARS else text
+        
+        # Check total accumulation
+        if len(combined_text) + len(clean_text) > MAX_TOTAL_CHARS:
+             print(f"Batch warning: Total text length {len(combined_text) + len(clean_text)} exceeds limit {MAX_TOTAL_CHARS}. Truncating batch content.")
+             break
+             
+        combined_text += f"\n--- CHUNK {i+1} ---\n{clean_text}\n"
 
     prompt = f"""You are a tagging engine. Analyze the following {len(texts)} text chunks. 
 For EACH chunk, identify relevant tags, themes, and consciousness levels.
