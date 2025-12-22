@@ -1382,7 +1382,7 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
                 database.update_status(title, "error", ai_provider.upper())
                 RETAG_STATUS["status"] = "error"
                 RETAG_STATUS["error"] = str(e)
-                # Continue to next document instead of crashing the whol task
+                # Continue to next document instead of crashing the whole task
                 continue
                 
         logger.info(f"Re-tagging complete: {total_docs} docs, {updated_chunks} chunks updated")
