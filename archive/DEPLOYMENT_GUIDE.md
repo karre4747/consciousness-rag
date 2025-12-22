@@ -158,38 +158,55 @@ systemctl start evolve
 systemctl status evolve
 ```
 
-### **Step 5: Configure Nginx (Optional but Recommended)**
+### **Step 5: Configure Nginx & Enforce HTTPS (Required)**
 
-Create nginx configuration:
+1. **Install Certbot**:
+   ```bash
+   apt install -y certbot python3-certbot-nginx
+   ```
 
-```bash
-nano /etc/nginx/sites-available/evolve
-```
+2. **Open Firewall Ports**:
+   ```bash
+   ufw allow 80
+   ufw allow 443
+   ufw enable
+   ```
 
-Add:
+3. **Create Nginx Config**:
+   ```bash
+   nano /etc/nginx/sites-available/evolve
+   ```
 
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;  # Replace with your domain
+   Add basic HTTP config (Certbot will upgrade this):
+   ```nginx
+   server {
+       listen 80;
+       server_name your-domain.com;  # Replace with your actual domain
 
-    location / {
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+       location / {
+           proxy_pass http://localhost:8000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
 
-Enable the site:
+4. **Enable Site & Obtain Certificate**:
+   ```bash
+   ln -s /etc/nginx/sites-available/evolve /etc/nginx/sites-enabled/
+   nginx -t && systemctl restart nginx
+   
+   # Run Certbot to obtain SSL and auto-configure Nginx
+   certbot --nginx -d your-domain.com
+   ```
+   *Select Option 2 (Redirect) when asked to ensure all traffic is securely encrypted.*
 
-```bash
-ln -s /etc/nginx/sites-available/evolve /etc/nginx/sites-enabled/
-nginx -t
-systemctl restart nginx
-```
+5. **Verify Auto-Renewal**:
+   ```bash
+   systemctl status certbot.timer
+   ```
 
 ### **Step 6: Verify Deployment**
 
