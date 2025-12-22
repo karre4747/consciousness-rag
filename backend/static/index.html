@@ -1821,11 +1821,11 @@
 
             const detailContainer = document.querySelector('.spending-details');
             // Remove old breakdown if exists
-            const oldBd = document.getElementById('sepndingBreakdownDetail');
+            const oldBd = document.getElementById('spendingBreakdownDetail');
             if (oldBd) oldBd.remove();
 
             const bdDiv = document.createElement('div');
-            bdDiv.id = 'sepndingBreakdownDetail';
+            bdDiv.id = 'spendingBreakdownDetail';
             bdDiv.innerHTML = bdHTML;
             detailContainer.appendChild(bdDiv);
 
@@ -2735,7 +2735,7 @@
             updateRetagStatus(); // Initial call
         }
 
-        function stopAnalysisPolling() {
+        function stopStatusPolling() {
             if (statusPollInterval) {
                 clearInterval(statusPollInterval);
                 statusPollInterval = null;
