@@ -599,7 +599,7 @@ async def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "oll
     return keyword_tags
 
 
-def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int = 15) -> Dict[str, Any]:
+def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int = 5) -> Dict[str, Any]:
     """
     PASS 2: Claude analyzes ALL documents together to find deep connections
     Run this AFTER upload is complete, as a background job
@@ -612,10 +612,12 @@ def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int
     """
 
     # Build context with FULL TEXT (up to reasonable safety limit per doc to allow batching)
-    # 200k tokens ~= 800k chars. If batch is 5 docs, each can have ~100k chars safe.
+    # 200k tokens ~= 800k chars. 
+    # With batch_size=5, each doc gets ~30k chars (150k total) allowing ample room for response/overhead.
+    MAX_CHARS_PER_DOC = 30000
     limited_docs = documents[:batch_size]
     context = "\n\n---\n\n".join([
-        f"DOC {i+1} [{doc.get('id')}]:\n{doc.get('text', '')[:100000]}...\nALL Tags: {doc.get('tags', [])}"
+        f"DOC {i+1} [{doc.get('id')}]:\n{doc.get('text', '')[:MAX_CHARS_PER_DOC]}...\nALL Tags: {doc.get('tags', [])}"
         for i, doc in enumerate(limited_docs)
     ])
 
