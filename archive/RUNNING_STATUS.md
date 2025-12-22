@@ -182,7 +182,7 @@ ss -tlnp | grep :8000
 journalctl -u evolve -n 100 | grep -i error
 
 # Verify that required API keys are configured in your environment
-# (See internal setup guide for details on .env configuration)
+# (See DEPLOYMENT_GUIDE.md, Step 3: Configure Environment Variables)
 ```
 
 ---
