@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evolve Consciousness Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 1.1em;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+
+        .tab-button:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .tab-button.active {
+            background: white;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 200px;
+            resize: vertical;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+
+        .answer-box {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .answer-box h3 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .sources {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .source-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        .source-item strong {
+            color: #667eea;
+        }
+
+        .document-list {
+            display: grid;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .document-card {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .document-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .document-card .meta {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+
+        .document-card .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .tag {
+            background: #667eea;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.85em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-card .number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .label {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧠 Evolve</h1>
+            <p>Consciousness Engine - Unified Database for Mysticism, Recovery & Quantum Wisdom</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab('upload')">Upload</button>
+            <button class="tab-button" onclick="switchTab('query')">Query</button>
+            <button class="tab-button" onclick="switchTab('documents')">Documents</button>
+        </div>
+
+        <!-- Upload Tab -->
+        <div id="upload-tab" class="tab-content active">
+            <h2>📤 Upload Document</h2>
+            <p style="margin-bottom: 20px; color: #666;">
+                Upload content to the knowledge base. Documents will be chunked into 1800-character segments, 
+                embedded, and tagged with comprehensive consciousness/recovery metadata.
+            </p>
+
+            <div class="form-group">
+                <label for="upload-title">Document Title *</label>
+                <input type="text" id="upload-title" placeholder="e.g., Big Book Chapter 1, Neville Goddard - Feeling is the Secret">
+            </div>
+
+            <div class="form-group">
+                <label for="upload-source">Source</label>
+                <input type="text" id="upload-source" placeholder="e.g., AA Big Book, Neville Goddard, David Hawkins">
+            </div>
+
+            <div class="form-group">
+                <label for="upload-text">Document Text *</label>
+                <textarea id="upload-text" placeholder="Paste your document content here..."></textarea>
+            </div>
+
+            <button onclick="uploadDocument()">Upload Document</button>
+
+            <div id="upload-status" class="status"></div>
+        </div>
+
+        <!-- Query Tab -->
+        <div id="query-tab" class="tab-content">
+            <h2>🔍 Query Knowledge Base</h2>
+            <p style="margin-bottom: 20px; color: #666;">
+                Ask questions about consciousness, recovery, mysticism, quantum physics, or any content in the database.
+                The system will retrieve relevant chunks and synthesize an answer using Claude.
+            </p>
+
+            <div class="form-group">
+                <label for="query-question">Your Question *</label>
+                <textarea id="query-question" style="min-height: 100px;" placeholder="e.g., How do the 12 Steps relate to enlightenment in Kabbalah?"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="query-top-k">Number of Chunks to Retrieve</label>
+                <select id="query-top-k">
+                    <option value="3">3 chunks</option>
+                    <option value="5" selected>5 chunks</option>
+                    <option value="10">10 chunks</option>
+                    <option value="15">15 chunks</option>
+                </select>
+            </div>
+
+            <button onclick="queryKnowledgeBase()">Ask Question</button>
+
+            <div id="query-status" class="status"></div>
+
+            <div id="answer-container" style="display: none;">
+                <div class="answer-box">
+                    <h3>Answer:</h3>
+                    <div id="answer-text"></div>
+                </div>
+
+                <div class="sources">
+                    <h3>Sources:</h3>
+                    <div id="sources-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documents Tab -->
+        <div id="documents-tab" class="tab-content">
+            <h2>📚 Uploaded Documents</h2>
+            <p style="margin-bottom: 20px; color: #666;">
+                View all documents in the knowledge base. Click refresh to update the list.
+            </p>
+
+            <button onclick="loadDocuments()">🔄 Refresh List</button>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="number" id="total-docs">-</div>
+                    <div class="label">Documents</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="total-chunks">-</div>
+                    <div class="label">Total Chunks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="chunk-size">1800</div>
+                    <div class="label">Chunk Size</div>
+                </div>
+            </div>
+
+            <div id="documents-status" class="status"></div>
+
+            <div id="documents-list" class="document-list"></div>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+
+            // Load documents if switching to documents tab
+            if (tabName === 'documents') {
+                loadDocuments();
+            }
+        }
+
+        // Upload document
+        async function uploadDocument() {
+            const title = document.getElementById('upload-title').value.trim();
+            const source = document.getElementById('upload-source').value.trim() || 'Unknown';
+            const text = document.getElementById('upload-text').value.trim();
+            const statusEl = document.getElementById('upload-status');
+
+            if (!title || !text) {
+                showStatus(statusEl, 'error', 'Please provide both title and text.');
+                return;
+            }
+
+            showStatus(statusEl, 'info', 'Uploading document... This may take a moment.');
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, source, text })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showStatus(statusEl, 'success', 
+                        `✓ Successfully uploaded "${data.title}" (${data.chunks_processed} chunks)`);
+                    // Clear form
+                    document.getElementById('upload-title').value = '';
+                    document.getElementById('upload-source').value = '';
+                    document.getElementById('upload-text').value = '';
+                } else {
+                    showStatus(statusEl, 'error', `Error: ${data.detail}`);
+                }
+            } catch (error) {
+                showStatus(statusEl, 'error', `Upload failed: ${error.message}`);
+            }
+        }
+
+        // Query knowledge base
+        async function queryKnowledgeBase() {
+            const question = document.getElementById('query-question').value.trim();
+            const topK = parseInt(document.getElementById('query-top-k').value);
+            const statusEl = document.getElementById('query-status');
+            const answerContainer = document.getElementById('answer-container');
+
+            if (!question) {
+                showStatus(statusEl, 'error', 'Please enter a question.');
+                return;
+            }
+
+            showStatus(statusEl, 'info', 'Searching knowledge base and generating answer...');
+            answerContainer.style.display = 'none';
+
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question, top_k: topK })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    statusEl.style.display = 'none';
+                    
+                    // Display answer
+                    document.getElementById('answer-text').innerText = data.answer;
+                    
+                    // Display sources
+                    const sourcesList = document.getElementById('sources-list');
+                    sourcesList.innerHTML = '';
+                    
+                    data.sources.forEach((source, index) => {
+                        const sourceDiv = document.createElement('div');
+                        sourceDiv.className = 'source-item';
+                        sourceDiv.innerHTML = `
+                            <strong>${index + 1}. ${source.title}</strong><br>
+                            <small>Source: ${source.source} | Relevance: ${(source.score * 100).toFixed(1)}%</small>
+                        `;
+                        sourcesList.appendChild(sourceDiv);
+                    });
+                    
+                    answerContainer.style.display = 'block';
+                } else {
+                    showStatus(statusEl, 'error', `Error: ${data.detail}`);
+                }
+            } catch (error) {
+                showStatus(statusEl, 'error', `Query failed: ${error.message}`);
+            }
+        }
+
+        // Load documents
+        async function loadDocuments() {
+            const statusEl = document.getElementById('documents-status');
+            const listEl = document.getElementById('documents-list');
+
+            showStatus(statusEl, 'info', 'Loading documents...');
+            listEl.innerHTML = '';
+
+            try {
+                const response = await fetch('/documents');
+                const data = await response.json();
+
+                if (response.ok) {
+                    statusEl.style.display = 'none';
+                    
+                    // Update stats
+                    document.getElementById('total-docs').innerText = data.documents.length;
+                    const totalChunks = data.documents.reduce((sum, doc) => sum + doc.chunk_count, 0);
+                    document.getElementById('total-chunks').innerText = totalChunks;
+                    
+                    // Display documents
+                    if (data.documents.length === 0) {
+                        listEl.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">No documents uploaded yet.</p>';
+                    } else {
+                        data.documents.forEach(doc => {
+                            const docCard = document.createElement('div');
+                            docCard.className = 'document-card';
+                            
+                            const tagsHTML = doc.tags.slice(0, 10).map(tag => 
+                                `<span class="tag">${tag}</span>`
+                            ).join('');
+                            
+                            docCard.innerHTML = `
+                                <h3>${doc.title}</h3>
+                                <div class="meta">
+                                    Source: ${doc.source} | Chunks: ${doc.chunk_count}
+                                </div>
+                                <div class="tags">${tagsHTML}</div>
+                            `;
+                            
+                            listEl.appendChild(docCard);
+                        });
+                    }
+                } else {
+                    showStatus(statusEl, 'error', `Error: ${data.detail}`);
+                }
+            } catch (error) {
+                showStatus(statusEl, 'error', `Failed to load documents: ${error.message}`);
+            }
+        }
+
+        // Helper function to show status messages
+        function showStatus(element, type, message) {
+            element.className = `status ${type}`;
+            element.innerText = message;
+            element.style.display = 'block';
+        }
+
+        // Load documents on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadDocuments();
+        });
+    </script>
+</body>
+</html>
