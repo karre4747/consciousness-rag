@@ -18,7 +18,7 @@ if sys.stderr.encoding != 'utf-8':
 
 load_dotenv(override=True)  # Override system environment variables
 
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
@@ -35,9 +35,14 @@ from pinecone import Pinecone, ServerlessSpec
 from openai import OpenAI
 from anthropic import Anthropic
 import tiktoken
-from tagging import generate_tags, claude_second_pass_analysis
+from tagging import generate_tags, claude_individual_analysis, claude_cross_document_synthesis
 from spending_tracker import SpendingTracker
 from cost_estimator import estimate_claude_cost
+
+# Document parsing libraries
+from pypdf import PdfReader
+from docx import Document
+import io
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -119,24 +124,25 @@ async def sync_database_with_pinecone():
                      
                      known_documents[title]["count"] += 1
                      md = vec.metadata
-                     
+
                      # Check tags
                      tags = md.get('tags', [])
                      if tags:
                          known_documents[title]["tags"] = True
-                         # Check for analysis in tags
-                         if isinstance(tags, list):
-                             for t in tags:
-                                 if "analyzed" in str(t).lower() or "claude" in str(t).lower():
-                                     known_documents[title]["is_analyzed"] = True
-                     
+
                      # Check provider
-                     if md.get('ai_provider'): 
+                     if md.get('ai_provider'):
                          known_documents[title]["provider"] = md.get('ai_provider')
-                     
-                     # Check explicit analysis markers
-                     if md.get('primary_theme') or md.get('cross_document_themes') or md.get('patterns'):
+
+                     # FIXED: Check canonical pass_3_status field FIRST (set during analysis at line 1893)
+                     # This is the most reliable indicator of completed analysis
+                     if md.get('pass_3_status') == 'Complete':
                          known_documents[title]["is_analyzed"] = True
+                     # Fallback: Check for analysis metadata (for older documents)
+                     elif md.get('primary_theme') or md.get('cross_document_themes') or md.get('patterns'):
+                         known_documents[title]["is_analyzed"] = True
+                     # Legacy fallback: Check tags (least reliable - can have false positives)
+                     # Removed brittle string matching that would match "Claude Shannon" etc.
 
                  # Incremental Save Logic
                  for title, info in known_documents.items():
@@ -372,6 +378,62 @@ async def pinecone_with_retry(func, max_retries=3, base_delay=1, max_delay=60, t
         except Exception as e:
             # Non-Pinecone exceptions - don't retry
             raise
+
+
+def extract_text_from_file(file_content: bytes, filename: str) -> str:
+    """
+    Extract text from PDF, DOCX, or TXT files.
+
+    Args:
+        file_content: Raw file bytes
+        filename: Original filename (for extension detection)
+
+    Returns:
+        Extracted text as string
+    """
+    file_ext = filename.lower().split('.')[-1]
+
+    try:
+        if file_ext == 'pdf':
+            # Extract from PDF
+            pdf_file = io.BytesIO(file_content)
+            reader = PdfReader(pdf_file)
+            text_parts = []
+            for page in reader.pages:
+                text = page.extract_text()
+                if text:
+                    text_parts.append(text)
+            return '\n'.join(text_parts)
+
+        elif file_ext in ['docx', 'doc']:
+            # Extract from DOCX
+            docx_file = io.BytesIO(file_content)
+            doc = Document(docx_file)
+            text_parts = []
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    text_parts.append(paragraph.text)
+            return '\n'.join(text_parts)
+
+        elif file_ext == 'txt':
+            # Plain text - try UTF-8 first, fall back to latin-1
+            try:
+                return file_content.decode('utf-8')
+            except UnicodeDecodeError:
+                return file_content.decode('latin-1', errors='ignore')
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {file_ext}. Supported types: PDF, DOCX, TXT"
+            )
+
+    except Exception as e:
+        logger.error(f"Error extracting text from {filename}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to extract text from {filename}: {str(e)}"
+        )
 
 
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
@@ -618,6 +680,182 @@ def clean_metadata_for_pinecone(metadata: Dict[str, Any]) -> Dict[str, Any]:
             cleaned[key] = str(value)
 
     return cleaned
+
+
+@app.post("/upload-file")
+async def upload_file_endpoint(
+    file: UploadFile = File(...),
+    use_ai_tagging: bool = True,
+    ai_provider: str = "openai",
+    ollama_model: str = "llama3.1"
+):
+    """
+    Upload a PDF, DOCX, or TXT file and process it for ingestion.
+
+    This endpoint:
+    1. Extracts text from the uploaded file
+    2. Chunks the document
+    3. Generates embeddings for each chunk
+    4. Generates metadata tags
+    5. Stores in Pinecone in batches
+    """
+    try:
+        # Read file content
+        file_content = await file.read()
+        filename = file.filename
+
+        logger.info(f"Processing file: {filename} ({len(file_content)} bytes)")
+
+        # Extract text from file
+        text = extract_text_from_file(file_content, filename)
+
+        if not text or not text.strip():
+            raise HTTPException(status_code=400, detail="No text could be extracted from the file")
+
+        logger.info(f"Extracted {len(text)} characters from {filename}")
+
+        # Remove file extension from title
+        title = filename.rsplit('.', 1)[0]
+
+        # Chunk the text
+        chunks = chunk_text(text)
+        total_chunks = len(chunks)
+        logger.info(f"Created {total_chunks} chunks")
+
+        # Process in batches
+        BATCH_SIZE = 20
+        total_uploaded = 0
+
+        for batch_start in range(0, total_chunks, BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, total_chunks)
+            batch_chunks = chunks[batch_start:batch_end]
+
+            logger.info(f"Processing batch {batch_start}-{batch_end} of {total_chunks}")
+
+            # Rate limiting pause between batches
+            if total_uploaded > 0:
+                await asyncio.sleep(0.5)
+
+            vectors_to_upsert = []
+
+            for i, chunk in enumerate(batch_chunks):
+                chunk_index = batch_start + i
+
+                try:
+                    # Clean chunk text
+                    clean_chunk = clean_text_for_metadata(chunk)
+
+                    # Generate embedding
+                    embedding = generate_embedding(clean_chunk)
+
+                    # Generate tags
+                    tags = await generate_tags(
+                        clean_chunk,
+                        use_ai=use_ai_tagging,
+                        ai_provider=ai_provider,
+                        title=title,
+                        ollama_model=ollama_model,
+                        openai_client=openai_client
+                    )
+
+                    # Create metadata
+                    detected_cats = tags.get("detected_categories", {})
+
+                    metadata = {
+                        "text": clean_chunk,
+                        "title": clean_text_for_metadata(title),
+                        "source": filename,
+                        "chunk_index": chunk_index,
+                        "total_chunks": total_chunks,
+                        "tags": tags.get("tags", []),
+                        "primary_theme": tags.get("primary_theme", ""),
+                        "consciousness_level": tags.get("consciousness_level", ""),
+                        "emotions": tags.get("emotions", []),
+                        "primary_chakra": tags.get("primary_chakra", ""),
+                        "tradition": tags.get("tradition", ""),
+                        "teacher": tags.get("teacher", ""),
+                        "ascension_path": tags.get("ascension_path", ""),
+                        "bridge_concept": tags.get("bridge_concept", ""),
+                        "recovery_focus": tags.get("recovery_focus", ""),
+                        "healing_modality": tags.get("healing_modality", ""),
+                        "ai_provider": tags.get("ai_provider", ""),
+                        "ai_model": tags.get("ai_model", ""),
+                        "all_chakras": detected_cats.get("chakras", []),
+                        "all_meridians": detected_cats.get("meridians", []),
+                        "all_12_steps": detected_cats.get("12_steps", []),
+                        "all_consciousness_levels": detected_cats.get("consciousness_level", []),
+                        "all_traditions": detected_cats.get("traditions", []),
+                        "all_teachers": detected_cats.get("teachers", []),
+                        "all_quantum_physics": detected_cats.get("quantum_physics", []),
+                        "all_quantum_particles": detected_cats.get("quantum_particles", []),
+                        "all_ascension_paths": detected_cats.get("ascension_paths", []),
+                        "all_bridge_concepts": detected_cats.get("bridge_concepts", []),
+                        "all_universal_laws": detected_cats.get("universal_laws", []),
+                        "all_healing_modalities": detected_cats.get("healing_modalities", []),
+                        "all_sacred_geometry": detected_cats.get("sacred_geometry", []),
+                        "all_subtle_bodies": detected_cats.get("subtle_bodies", []),
+                        "all_addiction_types": detected_cats.get("addiction_type", []),
+                        "all_planets": detected_cats.get("planets", []),
+                        "all_zodiac_signs": detected_cats.get("zodiac_signs", [])
+                    }
+
+                    if "program_level" in tags:
+                        metadata["program_level"] = tags["program_level"]
+
+                    # Clean metadata for Pinecone
+                    metadata = clean_metadata_for_pinecone(metadata)
+
+                    # Create vector ID
+                    import re
+                    safe_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title)
+                    vector_id = f"{safe_title}_{chunk_index}"
+
+                    vectors_to_upsert.append({
+                        "id": vector_id,
+                        "values": embedding,
+                        "metadata": metadata
+                    })
+
+                except Exception as chunk_error:
+                    logger.error(f"Error processing chunk {chunk_index}: {chunk_error}")
+                    continue
+
+            # Upsert batch to Pinecone
+            if vectors_to_upsert:
+                try:
+                    await pinecone_with_retry(
+                        lambda v=vectors_to_upsert: index.upsert(vectors=v),
+                        max_retries=3,
+                        timeout=20.0
+                    )
+                    total_uploaded += len(vectors_to_upsert)
+                    logger.info(f"Uploaded batch: {len(vectors_to_upsert)} vectors (total: {total_uploaded}/{total_chunks})")
+                except Exception as upsert_error:
+                    logger.error(f"Error upserting batch: {upsert_error}")
+                    raise HTTPException(status_code=500, detail=f"Failed to upload batch: {str(upsert_error)}")
+
+        if total_uploaded > 0:
+            # Add to SQLite database
+            has_tags = False
+            if 'tags' in locals() and isinstance(tags, dict):
+                has_tags = bool(tags.get("tags"))
+
+            database.add_document(title, total_chunks, has_tags, tags.get("ai_provider"))
+            logger.info(f"Added {title} to local SQLite database")
+
+        return {
+            "status": "success",
+            "message": f"File '{filename}' processed successfully",
+            "chunks_created": total_chunks,
+            "vectors_uploaded": total_uploaded,
+            "title": title
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/upload")
@@ -1363,16 +1601,20 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
                         logger.error(f"Batch {b_idx} failed: {e}")
                         failed_chunks += len(batch)
                         
-                # Document complete
-                # PRESERVE STATUS: If it was already analyzed, keep it analyzed.
+                # Document complete - FIXED: Properly preserve or downgrade status
                 current_docs = database.get_documents()
                 current_doc = next((d for d in current_docs if d['title'] == title), None)
-                final_status = "tagged"
-                # Force status to 'tagged' so it re-appears in "Analyze Pending" queue
-                # This meets the user's requirement to "send it back through analysis"
-                # STAMP WITH V2: Mark as Schema Version 2 (High Performance)
-                final_status = "tagged"
-                
+
+                # LOGIC: If document was previously analyzed, keep it analyzed (preserves analysis work)
+                # If it was only tagged or uploaded, mark as tagged (ready for analysis)
+                if current_doc and current_doc.get('status') == 'analyzed':
+                    final_status = "analyzed"
+                    logger.info(f"Preserving 'analyzed' status for {title} after re-tagging")
+                else:
+                    final_status = "tagged"
+                    logger.info(f"Setting status to 'tagged' for {title} - ready for analysis")
+
+                # STAMP WITH V2: Mark as Schema Version 2 (High Performance Tagging)
                 database.update_status(title, final_status, ai_provider.upper(), schema_version=2)
                 logger.info(f"Retagged {title}: {len(matches)} chunks (Final Status: {final_status}, Schema: V2)")
                 RETAG_STATUS["processed_documents"] += 1
@@ -1709,34 +1951,38 @@ async def analyze_documents(request: AnalyzeRequest):
             )
             matches = results.matches
         elif analysis_type == "pending":
-            # Fetch specifically documents that are NOT complete
-            # Logic: Query SQLite for pending docs, then fetch from Pinecone by title
-            # This fixes the issue where "pass_3_status" is not in Pinecone metadata
+            # OPTIMIZED: Fetch pending documents using SQLite filter, then single Pinecone query
+            # Previously made N separate queries (one per document), now uses single query with $in
             all_docs = database.get_documents()
-            # Filter matches "pass_3_status" != "Complete" -> status != 'analyzed'
+            # Filter: status != 'analyzed' means not yet analyzed
             pending_titles = [d['title'] for d in all_docs if d.get('status') != 'analyzed']
-            
-            # Respect limit
-            titles_to_process = pending_titles[:limit]
-            logger.info(f"Found {len(pending_titles)} pending documents. Fetching top {len(titles_to_process)} from Pinecone.")
-            
-            for title in titles_to_process:
+
+            if not pending_titles:
+                logger.info("No pending documents found for analysis")
+                matches = []
+            else:
+                # Respect limit
+                titles_to_process = pending_titles[:limit]
+                logger.info(f"Found {len(pending_titles)} pending documents. Fetching top {len(titles_to_process)} from Pinecone in SINGLE query.")
+
+                # CRITICAL OPTIMIZATION: Use single Pinecone query with $in filter
+                # This replaces 50+ individual queries with ONE query
                 try:
                     results = await pinecone_with_retry(
                         lambda: index.query(
                             vector=query_vector,
                             top_k=10000,
-                            filter={"title": title},
+                            filter={"title": {"$in": titles_to_process}},
                             include_metadata=True
                         ),
                         max_retries=2,
-                        timeout=30.0
+                        timeout=60.0  # Increased timeout for larger result set
                     )
-                    if results and results.matches:
-                        matches.extend(results.matches)
+                    matches = results.matches if results else []
+                    logger.info(f"Retrieved {len(matches)} chunks for {len(titles_to_process)} pending documents")
                 except Exception as e:
-                    logger.error(f"Failed to fetch pending document '{title}' from Pinecone: {e}")
-                    # Continue to next document
+                    logger.error(f"Failed to fetch pending documents from Pinecone: {e}")
+                    matches = []
         elif analysis_type == "theme":
             results = await pinecone_with_retry(
                 lambda: index.query(
@@ -1838,21 +2084,104 @@ async def analyze_documents(request: AnalyzeRequest):
 
         # Run analysis in batches of 15 documents
         # Run analysis in batches of 15 documents
-        batch_size = 15
-        batch_results = []
+        # Run analysis INDIVIDUALLY for each document
         unique_titles = set()
+        processed_count = 0
         
-        for start in range(0, len(documents), batch_size):
-            batch_docs = documents[start:start + batch_size]
-            analysis = claude_second_pass_analysis(batch_docs, batch_size=batch_size)
+        for doc in documents:
+            title = doc.get("title", "Unknown")
+            logger.info(f"Processing document {processed_count + 1}/{len(documents)}: {title}")
             
-            # Update status IMMEDIATELY for this batch so UI updates live
-            for doc in batch_docs:
-                title = doc.get("title", "Unknown")
-                if title != "Unknown":
-                    unique_titles.add(title)
-                    logger.info(f"Marking document as analyzed: {title}")
-                    database.update_status(title, "analyzed")
+            try:
+                # 1. Run Individual Analysis
+                analysis = await claude_individual_analysis(doc.get("text", ""), doc.get("tags", []), title)
+                
+                if "error" in analysis:
+                    logger.error(f"Analysis failed for {title}: {analysis['error']}")
+                    continue
+
+                # 2. Save Analysis Results to SQLite (V3)
+                import json
+                # Augment with metadata
+                analysis["analyzed_at"] = datetime.now().isoformat()
+                analysis["analysis_type"] = "individual"
+                
+                database.save_analysis_results(title, json.dumps(analysis))
+                logger.info(f"Saved analysis results for {title}")
+                
+                # 3. Update Pinecone Metadata (Themes & Patterns)
+                # Query chunks for this document to update their metadata
+                q_res = await pinecone_with_retry(
+                    lambda: index.query(
+                        vector=[0.0]*PINECONE_DIMENSION,
+                        top_k=1000,
+                        filter={"title": title},
+                        include_metadata=True,
+                        include_values=True 
+                    ),
+                    max_retries=2
+                )
+                
+                if q_res.matches:
+                    vectors_to_update = []
+                    
+                    # Extract new insights
+                    themes = analysis.get("core_themes", [])
+                    patterns = analysis.get("key_patterns", [])
+                    consciousness = analysis.get("consciousness_level_estimate", "neutrality")
+                    
+                    for match in q_res.matches:
+                        existing_meta = match.metadata or {}
+                        existing_tags = existing_meta.get("tags", [])
+                        
+                        # Merge new tags
+                        new_tags = set(existing_tags)
+                        for t in themes: new_tags.add(f"theme:{t}")
+                        for p in patterns: new_tags.add(f"pattern:{p}")
+                        
+                        updated_meta = {
+                            **existing_meta,
+                            "tags": list(new_tags),
+                            "consciousness_level": consciousness, # refined estimate
+                            "last_updated": datetime.now().isoformat(),
+                            "pass_3_status": "Complete"
+                        }
+
+                        # Add connection data if present
+                        connections = analysis.get("suggested_connections", [])
+                        if connections:
+                             # Store as JSON string in metadata if needed, or just keep in SQLite
+                             # For Pinecone, maybe just store the topics?
+                             # Let's keep it simple for now to avoid metadata bloat
+                             pass
+
+                        vectors_to_update.append({
+                            "id": match.id,
+                            "values": match.values,
+                            "metadata": clean_metadata_for_pinecone(updated_meta)
+                        })
+                    
+                    # Upsert updates
+                    if vectors_to_update:
+                        def chunks(l, n):
+                            for i in range(0, len(l), n):
+                                yield l[i:i + n]
+
+                        for chunk in chunks(vectors_to_update, 50):
+                             await pinecone_with_retry(
+                                lambda: index.upsert(vectors=chunk),
+                                max_retries=2
+                             )
+                        logger.info(f"Updated Pinecone metadata for {len(vectors_to_update)} chunks of {title}")
+                
+                # 4. Mark as Analyzed in SQLite
+                database.update_status(title, "analyzed")
+                unique_titles.add(title)
+                processed_count += 1
+                
+            except Exception as doc_error:
+                logger.error(f"Critical error analyzing {title}: {doc_error}")
+                continue # Skip to next document
             
             batch_results.append({
                 "batch_start": start,
@@ -1891,6 +2220,47 @@ async def analyze_documents(request: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/document-analysis/{title}")
+async def get_document_analysis(title: str):
+    """
+    Retrieve stored Claude analysis results for a specific document
+
+    Returns the deep analysis including:
+    - Cross-document themes
+    - Consciousness patterns
+    - Suggested connections to other documents
+    - Synthesis opportunities
+    """
+    try:
+        # Retrieve from SQLite
+        analysis_json = database.get_analysis_results(title)
+
+        if not analysis_json:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No analysis found for document: {title}. Document may not have been analyzed yet."
+            )
+
+        # Parse JSON and return
+        import json
+        analysis = json.loads(analysis_json)
+
+        return {
+            "status": "success",
+            "title": title,
+            "analysis": analysis
+        }
+
+    except HTTPException:
+        raise
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse analysis JSON for {title}: {e}")
+        raise HTTPException(status_code=500, detail="Stored analysis data is corrupted")
+    except Exception as e:
+        logger.error(f"Failed to retrieve analysis for {title}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

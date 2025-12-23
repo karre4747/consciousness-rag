@@ -359,11 +359,11 @@ Text:
 {text_to_analyze}
 
 Return ONLY valid JSON with these fields:
-{
+{{
   "tags": ["chakra_heart", "quantum_physics", "step_1", "photon_consciousness", "moksha", etc],
   "primary_theme": "one sentence summary",
   "consciousness_level": "shame|fear|courage|acceptance|love|peace|enlightenment"
-}
+}}
 
 Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies"""
 
@@ -441,11 +441,11 @@ Text:
 {text_to_analyze}
 
 Return ONLY valid JSON with these fields:
-{
+{{
   "tags": ["chakra_heart", "quantum_physics", "step_1", "photon_consciousness", "moksha", etc],
   "primary_theme": "one sentence summary",
   "consciousness_level": "shame|fear|courage|acceptance|love|peace|enlightenment"
-}
+}}
 
 Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies, astrology (planets/zodiac_signs)"""
 
@@ -592,15 +592,106 @@ async def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "oll
             # Add program_level to keyword tags if detected
             if program_level:
                 keyword_tags["program_level"] = program_level
+            keyword_tags["ai_provider"] = "FALLBACK"
             return keyword_tags
 
     # Add program_level to keyword tags if detected
     if program_level:
         keyword_tags["program_level"] = program_level
+
+    # Always include ai_provider field (even for keyword-only mode)
+    keyword_tags["ai_provider"] = "KEYWORDS"  # Indicates keyword-only (no AI tagging)
+    keyword_tags["ai_model"] = "keyword-based"
+
     return keyword_tags
 
 
-def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int = 5) -> Dict[str, Any]:
+async def claude_individual_analysis(document_text: str, current_tags: List[str], title: str) -> Dict[str, Any]:
+    """
+    PASS 3 (Individual): Claude analyzes a SINGLE document in depth.
+    Focuses on themes, integration points, and high-level consciousness concepts specific to this document.
+    """
+    import asyncio
+    import json
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Truncate to safe limit (Clauade context is huge, but let's be safe with 100k chars)
+    MAX_CHARS = 100000
+    clean_text = document_text[:MAX_CHARS] + "..." if len(document_text) > MAX_CHARS else document_text
+
+    prompt = f"""You are analyzing a high-level consciousness and recovery document titled "{title}".
+
+TEXT CONTENT:
+{clean_text}
+
+EXISTING TAGS: {current_tags}
+
+Your goal is to provide a deep semantic analysis that will be saved as the permanent "Analysis Profile" for this document.
+
+Analyze the text and identify:
+1. Core Themes (What is this document fundamentally about?)
+2. Consciousness Level (Hawkins scale calibration estimation based on content tone)
+3. Key Patterns (Recurring concepts, algorithms, or structures)
+4. Integration Opportunities (How does this synthesize 12-Step, Quantum Physics, and Spirituality?)
+5. Suggested Connections (What OTHER topics would this relate to? Be specific.)
+
+CRITICAL: Return ONLY valid JSON. No markdown. No code blocks.
+
+JSON Structure:
+{{
+  "summary": "2-3 sentence executive summary",
+  "core_themes": ["theme1", "theme2", "theme3"],
+  "consciousness_level_estimate": "level_name",
+  "key_patterns": ["pattern1", "pattern2"],
+  "integration_insights": ["insight1", "insight2"],
+  "suggested_connections": [
+    {{"topic": "Quantum Mechanics", "reason": "Mentions observer effect"}},
+    {{"topic": "Step 11", "reason": "Discusses meditation"}}
+  ]
+}}"""
+
+    try:
+        logger.info(f"Starting Claude INDIVIDUAL analysis for: {title}")
+        client = get_anthropic_client()
+
+        def _make_claude_call():
+             return client.messages.create(
+                model=os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022"),
+                max_tokens=4000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+        message = await asyncio.to_thread(_make_claude_call)
+        response_text = message.content[0].text
+        logger.debug(f"Claude individual response: {response_text[:300]}...")
+
+        # Parse JSON
+        try:
+            cleaned_text = response_text.strip()
+            # formatting fix if it returns markdown
+            if "```" in cleaned_text:
+                 cleaned_text = cleaned_text.split("```json")[-1].split("```")[0].strip()
+            if "```" in cleaned_text: # Handle generic code block
+                 cleaned_text = cleaned_text.split("```")[-1].split("```")[0].strip()
+
+            start = cleaned_text.find('{')
+            end = cleaned_text.rfind('}') + 1
+            if start != -1 and end > start:
+                 return json.loads(cleaned_text[start:end])
+            else:
+                 return {"error": "No JSON found"}
+        except Exception as parse_error:
+            logger.error(f"JSON Parse Error for {title}: {parse_error}")
+            return {"error": f"JSON Parse Error: {parse_error}"}
+
+    except Exception as e:
+        logger.error(f"Claude individual analysis failed for {title}: {e}")
+        return {"error": str(e)}
+
+
+async def claude_cross_document_synthesis(documents: List[Dict[str, Any]], batch_size: int = 5) -> Dict[str, Any]:
     """
     PASS 2: Claude analyzes ALL documents together to find deep connections
     Run this AFTER upload is complete, as a background job
@@ -611,9 +702,14 @@ def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int
     Returns:
         Dict with enhanced semantic connections and relationships
     """
+    import asyncio
+    import json
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     # Build context with FULL TEXT (up to reasonable safety limit per doc to allow batching)
-    # 200k tokens ~= 800k chars. 
+    # 200k tokens ~= 800k chars.
     # With batch_size=5, each doc gets ~30k chars (150k total) allowing ample room for response/overhead.
     MAX_CHARS_PER_DOC = 30000
     limited_docs = documents[:batch_size]
@@ -633,41 +729,76 @@ Review these {len(limited_docs)} documents and identify:
 DOCUMENTS:
 {context}
 
-Return JSON:
+CRITICAL: Return ONLY valid JSON with no markdown formatting. Do not wrap in code blocks.
+Keep all array items concise (under 150 characters each).
+
+Return this exact JSON structure:
 {{
   "cross_document_themes": ["theme1", "theme2"],
   "consciousness_patterns": ["pattern1", "pattern2"],
   "suggested_connections": [
-    {{"doc_id": "id1", "relates_to": "id2", "connection": "why they connect"}},
+    {{"doc_id": "id1", "relates_to": "id2", "connection": "why they connect"}}
   ],
   "synthesis_opportunities": ["opportunity1"]
 }}"""
 
     try:
+        logger.info(f"Starting Claude analysis for {len(limited_docs)} documents")
         client = get_anthropic_client()
-        message = client.messages.create(
-            model=os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022"),
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}]
-        )
 
-        import json
+        # Run the synchronous API call in a thread pool to not block event loop
+        def _make_claude_call():
+            return client.messages.create(
+                model=os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022"),
+                max_tokens=4000,  # Increased to allow for complete responses
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+        # Use asyncio.to_thread to run blocking call in thread pool
+        message = await asyncio.to_thread(_make_claude_call)
+        logger.info(f"Claude API call completed successfully")
+
         response_text = message.content[0].text
+        logger.debug(f"Claude response text: {response_text[:500]}...")
 
         # Extract JSON from response
         try:
+            # Remove markdown code blocks if present
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith('```'):
+                # Find the actual JSON content between code fences
+                lines = cleaned_text.split('\n')
+                # Skip first line (```json or ```)
+                json_lines = []
+                in_code_block = False
+                for line in lines:
+                    if line.strip().startswith('```'):
+                        if not in_code_block:
+                            in_code_block = True
+                            continue
+                        else:
+                            break  # End of code block
+                    if in_code_block:
+                        json_lines.append(line)
+                cleaned_text = '\n'.join(json_lines)
+
             # Try to find JSON in response
-            start = response_text.find('{')
-            end = response_text.rfind('}') + 1
+            start = cleaned_text.find('{')
+            end = cleaned_text.rfind('}') + 1
             if start != -1 and end > start:
-                analysis = json.loads(response_text[start:end])
+                json_str = cleaned_text[start:end]
+                analysis = json.loads(json_str)
+                logger.info(f"Successfully parsed Claude analysis JSON")
                 return analysis
             else:
-                return {"error": "No JSON found in response"}
+                logger.error("No JSON found in Claude response")
+                return {"error": "No JSON found in response", "raw_response": response_text[:500]}
         except json.JSONDecodeError as e:
-            return {"error": f"JSON parse error: {str(e)}"}
+            logger.error(f"JSON parse error: {str(e)}, response: {response_text[:1000]}")
+            return {"error": f"JSON parse error: {str(e)}", "raw_response": response_text[:1000]}
 
     except Exception as e:
+        logger.error(f"Claude analysis failed with exception: {str(e)}", exc_info=True)
         return {"error": f"Claude analysis failed: {str(e)}"}
 
 async def generate_tags_batch_openai(texts: List[str], openai_client, max_tokens: int = 1500, timeout: float = 30.0) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
