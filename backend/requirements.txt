@@ -6,3 +6,5 @@ anthropic>=0.39.0
 openai>=1.54.0
 python-dotenv>=1.0.0
 tiktoken>=0.5.2
+pypdf>=6.5.0
+python-docx>=1.2.0

@@ -978,7 +978,7 @@
                     <select id="aiProvider"
                         style="margin-left: 10px; padding: 8px; border-radius: 5px; border: 2px solid var(--royal-purple); color: var(--deep-purple); font-weight: 500;">
                         <option value="ollama">Ollama (FREE - Local)</option>
-                        <option value="openai">OpenAI GPT-3.5 ($0.40 per 1000 docs)</option>
+                        <option value="openai">OpenAI GPT-4o-mini ($0.15 per 1M tokens)</option>
                     </select>
                 </div>
                 <div id="ollamaModelDiv" style="margin-top: 10px;">
@@ -1341,40 +1341,19 @@
 
         async function uploadFile(file) {
             try {
-                const reader = new FileReader();
+                console.log(`Uploading ${file.name} (${Math.round(file.size / 1024)} KB)`);
 
-                const text = await new Promise((resolve, reject) => {
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = reject;
-                    // Explicitly use UTF-8 encoding
-                    reader.readAsText(file, 'UTF-8');
-                });
+                // Create FormData to send the actual file
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('use_ai_tagging', aiTagging.checked);
+                formData.append('ai_provider', document.getElementById('aiProvider').value);
+                formData.append('ollama_model', document.getElementById('ollamaModel').value);
 
-                // Clean up text to remove problematic characters
-                const cleanedText = text.replace(/\uFFFD/g, '') // Remove replacement characters
-                    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); // Remove control characters except \n, \r, \t
-
-                // Estimate size for user feedback
-                const sizeKB = Math.round(cleanedText.length / 1024);
-
-                console.log(`Processing ${file.name}: ${sizeKB} KB`);
-
-                const response = await fetch('/upload', {
-
+                const response = await fetch('/upload-file', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json; charset=utf-8',
-                    }
-
-                    ,
-                    body: JSON.stringify({
-                        text: cleanedText,
-                        title: file.name.replace(/\.[^/.]+$/, ''),
-                        source: file.name,
-                        use_ai_tagging: aiTagging.checked,
-                        ai_provider: document.getElementById('aiProvider').value,
-                        ollama_model: document.getElementById('ollamaModel').value
-                    })
+                    body: formData
+                    // Don't set Content-Type header - browser will set it with boundary for multipart/form-data
                 });
 
                 if (!response.ok) {

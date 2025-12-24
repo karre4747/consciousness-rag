@@ -1,3 +1,7 @@
+# CrewAI - Agent Orchestration Framework
+crewai==0.80.0
+crewai-tools==0.14.0
+
 aider-install==0.2.0
 annotated-doc==0.0.4
 annotated-types==0.7.0

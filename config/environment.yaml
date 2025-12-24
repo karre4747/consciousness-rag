@@ -1,0 +1,145 @@
+# Evolve Consciousness Engine - Environment Configuration
+# Defines behavior for different deployment environments and quality standards
+
+environments:
+  mac_development:
+    name: "Mac M1 Max (64GB RAM)"
+    ram_gb: 64
+    use_ollama: true  # Use local Ollama for Pass 2 (free)
+    ollama_model: "llama3.2:latest"
+    concurrent_processing: 10
+    chunk_size: 1800
+    chunk_overlap: 200
+    rate_limits:
+      openai_rpm: 3500  # Tier 2
+      anthropic_rpm: 1000  # Tier 2
+      pinecone_upsert_per_second: 100
+    
+  droplet_production:
+    name: "DigitalOcean Droplet (2GB RAM)"
+    ram_gb: 2
+    use_ollama: false  # Use OpenAI for Pass 2 (more reliable with low RAM)
+    openai_model: "gpt-4o-mini"
+    concurrent_processing: 1
+    chunk_size: 1800
+    chunk_overlap: 200
+    batch_size: 10  # Process 10 chunks at a time max
+    rate_limits:
+      openai_rpm: 500  # Conservative for small droplet
+      anthropic_rpm: 50  # Very conservative
+      pinecone_upsert_per_second: 20
+      
+  local_testing:
+    name: "Local Testing (Minimal)"
+    ram_gb: 4
+    use_ollama: true
+    concurrent_processing: 1
+    skip_pass_2: true  # For quick testing
+    skip_pass_3: true
+    chunk_size: 1800
+    chunk_overlap: 200
+
+
+# Quality Gates - Minimum standards for autonomous operation
+quality_gates:
+  tagging:
+    min_tags_per_chunk: 1
+    min_categories_detected: 2
+    required_passes:
+      - "keyword"  # Pass 1 always required
+    
+  pass_1_keywords:
+    min_tags: 1
+    min_categories: 2
+    category_coverage:
+      # At least ONE of these categories should be detected
+      required_any:
+        - "chakras"
+        - "consciousness_level"
+        - "traditions"
+        - "12_steps"
+        - "quantum"
+        - "ascension_paths"
+  
+  pass_2_ai_enhanced:
+    min_semantic_themes: 1
+    required_fields:
+      - "enhanced_tags"
+      - "semantic_themes"
+  
+  pass_3_claude_wisdom:
+    min_wisdom_insights: 1
+    required_fields:
+      - "consciousness_level"
+      - "cross_tradition_links"
+      - "wisdom_insights"
+    consciousness_level_range: [20, 1000]  # Valid Hawkins scale
+  
+  pinecone_upload:
+    success_rate_min: 0.99  # 99% of vectors must upload successfully
+    verify_upload: true  # Always verify vectors were actually uploaded
+    
+  overall_pipeline:
+    max_retries: 3
+    quality_threshold: 0.95  # 95% quality score
+    escalate_on_failure: true  # Alert human if quality fails after max retries
+
+
+# Cost Optimization Strategies
+cost_optimization:
+  use_ollama_when_possible: true
+  
+  pass_2_triggers:
+    # When to run Pass 2 (AI enhancement)
+    always: false
+    when_pass_1_tags_low: true  # Run if Pass 1 finds < 3 tags
+    batch_mode: false  # Skip Pass 2 in batch mode to save costs
+    
+  pass_3_triggers:
+    # When to run Pass 3 (Claude deep analysis)
+    always: false
+    selective: true  # Only for docs that warrant deep analysis
+    when_cross_traditions_detected: true  # Run if multiple traditions found
+    important_content_only: true  # User can flag important docs
+    
+  batch_processing:
+    use_pass_1_only: true  # For bulk uploads, just keywords
+    enable_pass_2_sampling: true  # Run Pass 2 on 10% of docs
+    enable_pass_3_sampling: true  # Run Pass 3 on 5% of docs
+
+
+# Autonomous Decision Rules
+autonomous_rules:
+  environment_detection:
+    # Agents will detect environment and adjust behavior
+    auto_detect: true
+    detection_criteria:
+      - ram_threshold_gb: 30  # > 30GB = Mac, < 30GB = Droplet
+      - ollama_available: check_localhost_11434
+      
+  processing_strategy:
+    # How agents decide processing approach
+    low_ram_strategy:
+      chunk_size: 1800
+      batch_size: 5
+      use_ollama: false
+      skip_pass_2_for_bulk: true
+      
+    high_ram_strategy:
+      chunk_size: 1800
+      batch_size: 50
+      use_ollama: true
+      run_all_passes: true
+      
+  failure_handling:
+    # What agents do when things fail
+    retry_strategy: "exponential_backoff"
+    max_retries: 3
+    escalate_after_failures: true
+    fallback_to_simpler_approach: true
+    
+  quality_loops:
+    # Self-healing behaviors
+    enable_auto_retry: true
+    adjust_strategy_on_failure: true
+    max_loop_iterations: 5
