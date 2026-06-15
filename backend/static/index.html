@@ -1089,6 +1089,9 @@
                     <button class="analysis-btn" onclick="estimateAndRunAnalysis('full', 0)">Analyze All</button>
                     <button class="analysis-btn" onclick="estimateAndRunAnalysis('selected', 0)">Analyze
                         Selected</button>
+                    <button class="analysis-btn" onclick="stopAllTasks()"
+                        style="background:#d63031; border-color:#d63031; color:white; font-weight:bold;">⛔ EMERGENCY
+                        STOP</button>
                 </div>
 
                 <!-- Document Selection Area -->
@@ -1166,6 +1169,14 @@
                         <div class="progress-fill" id="retagProgressFill" style="width: 0%"></div>
                     </div>
                     <div class="doc-chunks" id="retagProgressText">0 / 0 Documents Processed</div>
+                </div>
+
+                <div class="progress-container" id="analysisProgressContainer" style="display:block; margin-top: 20px;">
+                    <div class="stat-label" style="text-align:left; margin-bottom:5px; color: var(--royal-purple);">Claude Analysis Progress</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="analysisProgressFill" style="width: 0%; background-color: var(--royal-purple);"></div>
+                    </div>
+                    <div class="doc-chunks" id="analysisProgressText">0 / 0 Documents Processed</div>
                 </div>
             </div>
         </div>
@@ -1271,8 +1282,38 @@
                 const fileItem = document.createElement('div');
                 fileItem.className = 'file-item';
 
-                fileItem.innerHTML = `<span class="file-name">${file.name}</span> <span class="file-status status-pending" id="status-${index}">Pending</span>`;
+                fileItem.innerHTML = `<span class="file-name">${file.name}</span> <span class="file-status status-pending" id="status-${index}">Checking duplicates...</span>`;
                 fileList.appendChild(fileItem);
+
+                // Asynchronously check duplicates on selection to provide instant visual feedback
+                fetch('/check-duplicate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: file.name })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    const statusEl = document.getElementById(`status-${index}`);
+                    if (statusEl) {
+                        if (data.exists) {
+                            statusEl.textContent = 'Duplicate (Already In Library)';
+                            statusEl.className = 'file-status status-error';
+                            statusEl.style.backgroundColor = '#ffebee';
+                            statusEl.style.color = '#c62828';
+                        } else {
+                            statusEl.textContent = 'Ready';
+                            statusEl.className = 'file-status status-success';
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('Error checking duplicates on selection:', err);
+                    const statusEl = document.getElementById(`status-${index}`);
+                    if (statusEl) {
+                        statusEl.textContent = 'Ready';
+                        statusEl.className = 'file-status status-success';
+                    }
+                });
             });
         }
 
@@ -1290,7 +1331,7 @@
                 const file = selectedFiles[i];
 
                 const statusEl = document.getElementById(`status-${i}`);
-                const title = file.name.replace(/\.[^/.]+$/, '');
+                const title = file.name; // Keep full name with extension
 
                 // Check for duplicates before uploading
                 statusEl.textContent = 'Checking for duplicates...';
@@ -1400,7 +1441,7 @@
             }
 
             // Headers for clarity
-            const headerGrid = '40px 3fr 1fr 1fr 1.5fr 1fr 140px';
+            const headerGrid = '40px 3fr 1fr 1fr 1.5fr 1fr 1fr 140px';
             const headerHTML = `
                 <div class="doc-item header-row" style="background: #eee; font-weight: 700; color: #555; position: sticky; top: 0; z-index: 10; grid-template-columns: ${headerGrid};">
                     <div><input type="checkbox" id="selectAll-${containerId}" onchange="toggleSelectAll('${containerId}', this.checked)"></div>
@@ -1409,6 +1450,7 @@
                     <div style="text-align:center">1. Upload</div>
                     <div style="text-align:center">2. Tagging</div>
                     <div style="text-align:center">3. Analysis</div>
+                    <div style="text-align:center">Version</div>
                     <div style="text-align:right">Actions</div>
                 </div>
             `;
@@ -1438,8 +1480,15 @@
                     analyzeStatus = `<span style="font-size:0.9em; background:#a29bfe; color:#FFF; padding:2px 6px; border-radius:4px;" title="Analyzed by Claude">✨ Claude</span>`;
                 }
 
+                // 4. Version Status
+                const version = doc.schema_version || 1;
+                let vBadge = `<span style="font-size:0.8em; background:#dfe6e9; color:#636e72; padding:2px 6px; border-radius:4px;">Legacy (V1)</span>`;
+                if (version >= 2) {
+                    vBadge = `<span style="font-size:0.8em; background:#00b894; color:white; padding:2px 6px; border-radius:4px;">V2.0 (High Perf)</span>`;
+                }
+
                 return `
-                <div class="doc-item" data-title="${escapeHtml(doc.title)}" style="grid-template-columns: 40px 3fr 1fr 1fr 1.5fr 1fr 140px;">
+                <div class="doc-item" data-title="${escapeHtml(doc.title)}" style="grid-template-columns: 40px 3fr 1fr 1fr 1.5fr 1fr 1fr 140px;">
                     <div><input type="checkbox" class="doc-select" value="${escapeHtml(doc.title)}"></div>
                     <div class="doc-title">${escapeHtml(doc.title)}</div>
                     <div class="doc-chunks">${doc.chunk_count}</div>
@@ -1448,13 +1497,16 @@
                     <div style="text-align:center;">${uploadStatus}</div>
                     <div style="text-align:center;">${tagStatus}</div>
                     <div style="text-align:center;">${analyzeStatus}</div>
+                    <div style="text-align:center;">${vBadge}</div>
 
                     <div class="doc-actions">
+                        ${doc.pass_3_status === 'Complete' ? `<button class="view-analysis-btn" onclick="viewDocumentAnalysis('${escapeHtml(doc.title)}')" title="View Claude Analysis" style="background:#6c5ce7; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:12px; margin-right:4px;">👁️ View</button>` : ''}
                         ${doc.pass_2_status === 'Pending' && doc.pass_1_status === 'Complete' ? `<button class="upgrade-ai-btn" data-title="${escapeHtml(doc.title)}" title="Upgrade to AI Tagging">✨ AI</button>` : ''}
                         <button class="delete-doc-btn" onclick="deleteDocument('${escapeHtml(doc.title)}')" title="Delete document">🗑️</button>
                     </div>
                 </div>
-            `}).join('');
+            `
+            }).join('');
 
             container.innerHTML = headerHTML + rowsHTML;
         }
@@ -2033,15 +2085,16 @@
                     return;
                 }
 
-                console.log('✅ Analysis successful! Documents analyzed:', data.documents_analyzed);
+                console.log('✅ Analysis started successfully! Documents queued:', data.documents_analyzed);
                 const docLabel = data.documents_analyzed === 1 ? 'document' : 'documents';
-                const msg = `Analyzed ${data.documents_analyzed} ${docLabel}. Rendering results...`;
-                analysisStatus.innerHTML = `<div class="status-success"><strong>${msg}</strong></div>`;
+                const msg = `Claude analysis started for ${data.documents_analyzed} ${docLabel} in the background.`;
+                analysisStatus.innerHTML = `<div class="status-success"><strong>✅ ${msg}</strong><br>Check the <a href="#" onclick="switchTab('status'); return false;">Status</a> tab for live progress.</div>`;
 
-                displayAnalysisResults(data);
+                switchTab('status');
+                startStatusPolling();
                 await loadSpendingDashboard();
 
-                // REFRESH LIST to remove analyzed docs from the Todo list
+                // REFRESH LIST to show processing status in UI list
                 setTimeout(loadDocumentList, 1000);
             }
 
@@ -2208,6 +2261,7 @@
                             <th style="padding: 10px; border-bottom: 2px solid #ddd;">Pass 1 (Keywords)</th>
                             <th style="padding: 10px; border-bottom: 2px solid #ddd;">Pass 2 (AI Status)</th>
                             <th style="padding: 10px; border-bottom: 2px solid #ddd;">Version</th>
+                            <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2253,6 +2307,9 @@
                             <td style="padding: 10px;">${p1Badge}</td>
                             <td style="padding: 10px;">${p2Badge}</td>
                             <td style="padding: 10px;">${vBadge}</td>
+                            <td style="padding: 10px; text-align: right;">
+                                <button onclick="deleteDocument('${escapeHtml(doc.title)}')" style="background: #ff6b6b; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">🗑️</button>
+                            </td>
                         </tr>
                         `;
                 });
@@ -2671,16 +2728,26 @@
         });
 
         async function retagSingleDocument(title) {
-            const providerSelect = document.getElementById('aiProvider'); const provider = providerSelect ? providerSelect.value : 'openai';
-            const modelSelect = document.getElementById('ollamaModel'); const model = modelSelect ? modelSelect.value : 'llama3.1';
+            const providerSelect = document.getElementById('aiProvider');
+            const provider = providerSelect ? providerSelect.value : 'openai';
+            const modelSelect = document.getElementById('ollamaModel');
+            const model = modelSelect ? modelSelect.value : 'llama3.1';
 
-            const msg = `Upgrade "${title}" using ${provider.toUpperCase()}?`;
+            const providerDisplay = provider === 'openai' ? 'OpenAI (Paid)' : `Ollama (${model})`;
+            const msg = `Upgrade "${title}" to AI Tagging?\n\nThis will use ${providerDisplay} to generate comprehensive tags for all chunks.\n\nContinue?`;
             if (!confirm(msg)) return;
+
+            // CRITICAL FIX: Ensure the document isn't hidden in the tagging tab
+            const v2Filter = document.getElementById('hideV2Checkbox');
+            if (v2Filter && v2Filter.checked) {
+                console.log("Unchecking 'Hide V2' filter to show upgrade progress...");
+                v2Filter.checked = false;
+            }
 
             // Switch to tagging tab to show progress
             switchTab('tagging');
             const statusEl = document.getElementById('taggingStatus');
-            statusEl.textContent = `Upgrading "${title}"...`;
+            if (statusEl) statusEl.textContent = `Upgrading "${title}"...`;
 
             try {
                 const response = await fetch('/retag-documents', {
@@ -2695,14 +2762,17 @@
 
                 const data = await response.json();
                 if (data.status === 'success') {
-                    statusEl.textContent = `✅ Upgrade started for "${title}". Check table below for progress.`;
-                    setTimeout(verifyTagging, 1000);
+                    if (statusEl) statusEl.textContent = `✅ Upgrade started for "${title}". Document will stay visible in list below.`;
+                    // Immediate verification to show processing status
+                    verifyTagging();
                 } else {
                     alert(`❌ Upgrade failed: ${data.message}`);
+                    if (statusEl) statusEl.textContent = `Error: ${data.message}`;
                 }
             } catch (error) {
                 console.error('Upgrade failed:', error);
-                alert('❌ Upgrade failed. Check console.');
+                alert('❌ Upgrade failed. Check server connection.');
+                if (statusEl) statusEl.textContent = 'Network or server error during upgrade.';
             }
         }
 
@@ -2725,6 +2795,7 @@
 
         async function updateRetagStatus() {
             try {
+                // Poll re-tag status
                 const response = await fetch('/retag-status');
                 const status = await response.json();
 
@@ -2741,10 +2812,39 @@
                     progressText.textContent = "No active job.";
                 }
 
-                systemStatus.textContent = `Job Status: ${status.status.toUpperCase()}`;
+                // Poll analysis status
+                const analysisResponse = await fetch('/analysis-status');
+                const aStatus = await analysisResponse.json();
+
+                const aProgressFill = document.getElementById('analysisProgressFill');
+                const aProgressText = document.getElementById('analysisProgressText');
+
+                if (aStatus.total_documents > 0) {
+                    const aPercent = Math.round((aStatus.processed_documents / aStatus.total_documents) * 100);
+                    if (aProgressFill) aProgressFill.style.width = aPercent + '%';
+                    if (aProgressText) aProgressText.textContent = `${aStatus.processed_documents} / ${aStatus.total_documents} Documents Analyzed (Status: ${aStatus.status})`;
+                } else {
+                    if (aProgressFill) aProgressFill.style.width = '0%';
+                    if (aProgressText) aProgressText.textContent = "No active job.";
+                }
+
+                // Update systemStatus label based on active operations
+                if (status.status === 'running' && aStatus.status === 'running') {
+                    systemStatus.textContent = `Job Status: RE-TAGGING & ANALYZING`;
+                } else if (status.status === 'running') {
+                    systemStatus.textContent = `Job Status: RE-TAGGING`;
+                } else if (aStatus.status === 'running') {
+                    systemStatus.textContent = `Job Status: ANALYZING`;
+                } else {
+                    systemStatus.textContent = `Job Status: IDLE`;
+                }
 
                 if (status.status === 'error') {
-                    systemStatus.textContent += ` - Error: ${status.error}`;
+                    systemStatus.textContent += ` (Re-tag Error: ${status.error})`;
+                    systemStatus.style.color = 'red';
+                }
+                if (aStatus.status === 'error') {
+                    systemStatus.textContent += ` (Analysis Error: ${aStatus.error})`;
                     systemStatus.style.color = 'red';
                 }
 
@@ -2753,7 +2853,82 @@
             }
         }
 
+        // View Document Analysis Modal
+        async function viewDocumentAnalysis(title) {
+            try {
+                const response = await fetch(`/document-analysis/${encodeURIComponent(title)}`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const analysis = data.analysis || {};
+                    const themes = (analysis.cross_document_themes || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
+                    const patterns = (analysis.consciousness_patterns || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
+                    const synth = (analysis.synthesis_opportunities || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
+                    const connections = (analysis.suggested_connections || []).map(c => `<li>${escapeHtml(c.relates_to || '')}: ${escapeHtml(c.connection || '')}</li>`).join('') || '<li>None</li>';
+                    
+                    const modalHTML = `
+                        <h3>🧠 Claude Deep Analysis for Document</h3>
+                        <p style="font-size:1.1em; font-weight:bold; color:var(--royal-purple); margin-bottom:15px;">${escapeHtml(title)}</p>
+                        
+                        <div style="margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; text-align:left;">
+                            <strong>Themes:</strong>
+                            <ul style="margin:5px 0; padding-left:20px;">${themes}</ul>
+                        </div>
+                        
+                        <div style="margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; text-align:left;">
+                            <strong>Patterns:</strong>
+                            <ul style="margin:5px 0; padding-left:20px;">${patterns}</ul>
+                        </div>
+                        
+                        <div style="margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; text-align:left;">
+                            <strong>Synthesis Opportunities:</strong>
+                            <ul style="margin:5px 0; padding-left:20px;">${synth}</ul>
+                        </div>
+                        
+                        <div style="text-align:left;">
+                            <strong>Suggested Connections:</strong>
+                            <ul style="margin:5px 0; padding-left:20px;">${connections}</ul>
+                        </div>
+                    `;
+                    showModal(modalHTML);
+                } else {
+                    alert(`❌ Failed to retrieve analysis: ${data.detail || 'Not analyzed yet'}`);
+                }
+            } catch (error) {
+                console.error('Failed to load analysis:', error);
+                alert('❌ Failed to retrieve analysis. Check server connection.');
+            }
+        }
 
+
+
+        async function stopAllTasks() {
+            if (!confirm('🛑 EMERGENCY STOP: Are you sure you want to stop all background tasks? \n\nThis will safely abort both re-tagging and Claude analysis at the next document/batch checkpoint.')) return;
+
+            try {
+                const response = await fetch('/stop-tasks', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    // Force update status areas
+                    const analysisStatus = document.getElementById('analysisStatus');
+                    if (analysisStatus) {
+                        analysisStatus.innerHTML = '<span style="color:#d63031; font-weight:bold;">⛔ Emergency Stop Requested. Finishing current document...</span>';
+                    }
+
+                    const retagProgress = document.getElementById('retagProgress');
+                    if (retagProgress) {
+                        retagProgress.style.border = '2px solid #d63031';
+                        retagProgress.innerHTML += '<div style="color:#d63031; font-weight:bold; margin-top:10px;">⛔ STOP SIGNAL SENT</div>';
+                    }
+
+                    console.warn('Emergency stop signal sent successfully.');
+                }
+            } catch (error) {
+                console.error('Failed to stop tasks:', error);
+                alert('Connection error while trying to stop tasks.');
+            }
+        }
 
     </script>
 </body>

@@ -8,8 +8,11 @@ Updated: November 30, 2025
 
 from typing import Dict, Any, List
 import os
+import logging
 from openai import OpenAI
 from anthropic import Anthropic
+
+logger = logging.getLogger(__name__)
 
 # Initialize clients
 def get_openai_client():
@@ -341,10 +344,10 @@ def generate_tags_keyword_based(text: str) -> Dict[str, Any]:
     }
 
 
-def generate_tags_ollama(text: str, model: str = "llama3.1") -> Dict[str, Any]:
+def generate_tags_ollama(text: str, model: str = "llama3.3") -> Dict[str, Any]:
     """
     Use Ollama (local LLM) for FREE tagging with semantic understanding
-    Requires Ollama running locally: brew install ollama && ollama pull llama3.1
+    Requires Ollama running locally: brew install ollama && ollama pull llama3.3
     """
     import requests
     import json
@@ -359,11 +362,11 @@ Text:
 {text_to_analyze}
 
 Return ONLY valid JSON with these fields:
-{
+{{
   "tags": ["chakra_heart", "quantum_physics", "step_1", "photon_consciousness", "moksha", etc],
   "primary_theme": "one sentence summary",
   "consciousness_level": "shame|fear|courage|acceptance|love|peace|enlightenment"
-}
+}}
 
 Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies"""
 
@@ -441,11 +444,11 @@ Text:
 {text_to_analyze}
 
 Return ONLY valid JSON with these fields:
-{
+{{
   "tags": ["chakra_heart", "quantum_physics", "step_1", "photon_consciousness", "moksha", etc],
   "primary_theme": "one sentence summary",
   "consciousness_level": "shame|fear|courage|acceptance|love|peace|enlightenment"
-}
+}}
 
 Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), esoteric_traditions (hermetic/kabbalah/sufi/vedic/buddhist/taoist/gnostic/rosicrucian), esoteric_teachers (leadbeater/besant/blavatsky/bailey/steiner/goddard/hawkins/dispenza), quantum_physics, quantum_particles (photons/bosons/fermions/entanglement), ascension_paths (12_step_ascension/moksha/nirvana/devekut/fana/theosis), bridge_concepts (photon_consciousness/chakra_sephiroth/quantum_mind/addiction_ascension), universal_laws, healing_modalities, sacred_geometry, subtle_bodies, astrology (planets/zodiac_signs)"""
 
@@ -513,7 +516,7 @@ Categories: chakras, meridians, 12_steps, consciousness_levels (Hawkins scale), 
     return generate_tags_keyword_based(text)
 
 
-async def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "ollama", title: str = "", ollama_model: str = "llama3.1", openai_client=None) -> Dict[str, Any]:
+async def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "ollama", title: str = "", ollama_model: str = "llama3.3", openai_client=None) -> Dict[str, Any]:
     """
     Main tagging function combining keyword and AI tagging
 
@@ -522,7 +525,7 @@ async def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "oll
         use_ai: Use AI enhancement (default: False for speed and FREE)
         ai_provider: "ollama" (FREE, local) or "openai" (paid but faster) - default: "ollama"
         title: Document title (used for program_level detection in addiction content)
-        ollama_model: Ollama model to use (default: "llama3.1")
+        ollama_model: Ollama model to use (default: "llama3.3")
         openai_client: OpenAI client instance (required if ai_provider="openai")
 
     Returns:
@@ -630,15 +633,22 @@ Review these {len(limited_docs)} documents and identify:
 3. Cross-tradition synthesis opportunities
 4. Missing semantic relationships
 
+CRITICAL REQUIREMENTS:
+- Return ONLY a valid JSON object.
+- Ensure all double quotes inside JSON string values are properly escaped (e.g. use \\" for nested quotes).
+- Do NOT include any trailing commas.
+- Do NOT include unescaped newlines within string values; use \\n for line breaks.
+- In suggested_connections, doc_id and relates_to MUST contain the exact document titles as provided in the square brackets below (e.g. "124685109-Quantum-Healing.pdf"), including their file extensions, numbers, and case sensitivity. Do not use shorthand index like "DOC 1".
+
 DOCUMENTS:
 {context}
 
-Return JSON:
+Return JSON matching this schema:
 {{
   "cross_document_themes": ["theme1", "theme2"],
   "consciousness_patterns": ["pattern1", "pattern2"],
   "suggested_connections": [
-    {{"doc_id": "id1", "relates_to": "id2", "connection": "why they connect"}},
+    {{"doc_id": "Exact Document Title 1", "relates_to": "Exact Document Title 2", "connection": "why they connect"}}
   ],
   "synthesis_opportunities": ["opportunity1"]
 }}"""
@@ -652,20 +662,35 @@ Return JSON:
         )
 
         import json
+        import re
         response_text = message.content[0].text
 
         # Extract JSON from response
+        json_str = ""
         try:
             # Try to find JSON in response
             start = response_text.find('{')
             end = response_text.rfind('}') + 1
             if start != -1 and end > start:
-                analysis = json.loads(response_text[start:end])
+                json_str = response_text[start:end]
+                analysis = json.loads(json_str)
                 return analysis
             else:
+                logger.error(f"No JSON found in response. Raw response:\n{response_text}")
                 return {"error": "No JSON found in response"}
         except json.JSONDecodeError as e:
-            return {"error": f"JSON parse error: {str(e)}"}
+            logger.warning(f"Initial JSON parse failed: {e}. Attempting recovery/cleaning...")
+            try:
+                # Clean trailing commas
+                cleaned = re.sub(r',\s*([\]}])', r'\1', json_str)
+                # Remove control chars (like raw newlines) in string values can be tricky,
+                # but let's try parsing the cleaned JSON string first
+                analysis = json.loads(cleaned)
+                logger.info("JSON successfully parsed after cleaning trailing commas!")
+                return analysis
+            except Exception as e2:
+                logger.error(f"JSON recovery failed. Error: {e2}\nRaw JSON string extracted:\n{json_str}\nFull Response text:\n{response_text}")
+                return {"error": f"JSON parse error: {str(e)}"}
 
     except Exception as e:
         return {"error": f"Claude analysis failed: {str(e)}"}

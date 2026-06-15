@@ -18,7 +18,7 @@ if sys.stderr.encoding != 'utf-8':
 
 load_dotenv(override=True)  # Override system environment variables
 
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
@@ -54,6 +54,7 @@ anthropic_client = None
 index = None
 spending_tracker = SpendingTracker()
 
+
 # Configuration
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "evolve-consciousness")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
@@ -66,116 +67,177 @@ PINECONE_DIMENSION = int(os.getenv("PINECONE_DIMENSION", "1536"))
 import database
 
 # Background Sync Status
-SYNC_STATUS = "idle"
+SYNC_STATUS = {
+    "status": "idle",  # idle | running | completed | error
+    "total_vectors": 0,
+    "processed_vectors": 0,
+    "documents_found": 0,
+    "current_document": None,
+    "error": None,
+    "last_updated": None
+}
 
-# Global re‑tagging progress tracking
+# Global task stop signal
+TASK_STOP_SIGNAL = False
+
+# Global re-tagging progress tracking
 RETAG_STATUS = {
     "total_documents": 0,
     "processed_documents": 0,
-    "status": "idle",  # idle | running | completed | error
+    "status": "idle",  # idle | running | completed | error | stopped
     "error": None,
 }
+
+# Global analysis progress tracking
+ANALYSIS_STATUS = {
+    "total_documents": 0,
+    "processed_documents": 0,
+    "status": "idle",  # idle | running | completed | error | stopped
+    "error": None,
+    "last_updated": None
+}
+
 
 # Existing SYNC_STATUS remains for database sync
 
 
 async def sync_database_with_pinecone():
     """
-    One-off background task to populate SQLite from Pinecone.
-    Stream processing to avoid memory issues and long startup.
+    Background task to populate SQLite from Pinecone.
+    Non-blocking with detailed progress tracking.
     """
     global SYNC_STATUS, index
-    if SYNC_STATUS == "running": return
     
-    SYNC_STATUS = "running"
-    logger.info("Starting Database Sync...")
+    # Prevent multiple concurrent syncs
+    if SYNC_STATUS["status"] == "running":
+        logger.info("Sync already running, skipping...")
+        return
+    
+    # Reset status
+    SYNC_STATUS.update({
+        "status": "running",
+        "total_vectors": 0,
+        "processed_vectors": 0,
+        "documents_found": 0,
+        "current_document": None,
+        "error": None,
+        "last_updated": datetime.now().isoformat()
+    })
+    
+    logger.info("🔄 Starting Database Sync...")
     
     try:
         import gc
         
-        known_documents = {} # Temp tracker for this run
+        known_documents = {}  # Temp tracker for this run
         total_vectors_checked = 0
         documents_found = 0
         
         async def process_batch(batch_ids):
-             nonlocal documents_found
-             try:
-                 # Fetch actual vector data
-                 fetched = await pinecone_with_retry(lambda: index.fetch(ids=batch_ids), max_retries=3)
-                 
-                 batch_updates = []
-                 for vec in fetched.vectors.values():
-                     title = vec.metadata.get('title', 'Unknown')
-                     
-                     if title not in known_documents:
-                         known_documents[title] = {
-                             "count": 0, 
-                             "tags": False, 
-                             "provider": None, 
-                             "saved": False,
-                             "is_analyzed": False
-                         }
-                         documents_found += 1
-                     
-                     known_documents[title]["count"] += 1
-                     md = vec.metadata
-                     
-                     # Check tags
-                     tags = md.get('tags', [])
-                     if tags:
-                         known_documents[title]["tags"] = True
-                         # Check for analysis in tags
-                         if isinstance(tags, list):
-                             for t in tags:
-                                 if "analyzed" in str(t).lower() or "claude" in str(t).lower():
-                                     known_documents[title]["is_analyzed"] = True
-                     
-                     # Check provider
-                     if md.get('ai_provider'): 
-                         known_documents[title]["provider"] = md.get('ai_provider')
-                     
-                     # Check explicit analysis markers
-                     if md.get('primary_theme') or md.get('cross_document_themes') or md.get('patterns'):
-                         known_documents[title]["is_analyzed"] = True
-
-                 # Incremental Save Logic
-                 for title, info in known_documents.items():
-                     # Determine status hierarchy
-                     status = "uploaded"
-                     if info["provider"]: 
-                         status = "tagged"
-                     if info["is_analyzed"]:
-                         status = "analyzed"
-                         
-                     database.add_document(title, info["count"], info["tags"])
-                     if status != "uploaded":
-                         database.update_status(title, status, info["provider"])
-                         
-             except Exception as e:
-                 logger.error(f"Sync fetch error: {e}")
-
+            nonlocal documents_found, total_vectors_checked
+            try:
+                # Fetch actual vector data
+                fetched = await pinecone_with_retry(lambda: index.fetch(ids=batch_ids), max_retries=3)
+                
+                for vec in fetched.vectors.values():
+                    title = vec.metadata.get('title', 'Unknown')
+                    
+                    if title not in known_documents:
+                        known_documents[title] = {
+                            "count": 0,
+                            "tags": False,
+                            "provider": None,
+                            "is_analyzed": False,
+                            "schema_version": 2 # Default to 2 for modern sync
+                        }
+                        documents_found += 1
+                        SYNC_STATUS["documents_found"] = documents_found
+                        SYNC_STATUS["current_document"] = title
+                    
+                    known_documents[title]["count"] += 1
+                    md = vec.metadata
+                    
+                    # Update schema version if present in any chunk
+                    ver = md.get('schema_version')
+                    if ver:
+                        try:
+                            known_documents[title]["schema_version"] = int(ver)
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Check tags
+                    tags = md.get('tags', [])
+                    if tags:
+                        known_documents[title]["tags"] = True
+                        # Check for analysis in tags
+                        if isinstance(tags, list):
+                            for t in tags:
+                                if "analyzed" in str(t).lower() or "claude" in str(t).lower():
+                                    known_documents[title]["is_analyzed"] = True
+                    
+                    # Check provider
+                    if md.get('ai_provider'):
+                        known_documents[title]["provider"] = md.get('ai_provider')
+                    
+                    # Check explicit analysis markers
+                    if md.get('primary_theme') or md.get('cross_document_themes') or md.get('patterns'):
+                        known_documents[title]["is_analyzed"] = True
+                
+                logger.info(f"Syncing document: {title}")
+                # Incremental Save Logic
+                for title, info in known_documents.items():
+                    # Determine status hierarchy
+                    status = "uploaded"
+                    if info["provider"]:
+                        status = "tagged"
+                    if info["is_analyzed"]:
+                        status = "analyzed"
+                    
+                    database.add_document(title, info["count"], info["tags"], schema_version=info["schema_version"])
+                    if status != "uploaded":
+                        database.update_status(title, status, info["provider"], schema_version=info["schema_version"])
+                
+                # Free memory
+                gc.collect()
+                
+            except Exception as e:
+                logger.error(f"Sync fetch error: {e}")
+                raise
+        
         # Stream IDs and process immediately
         def get_all_batches():
             return list(index.list())
         
         all_batches = await asyncio.to_thread(get_all_batches)
-        for ids_batch in all_batches:
-            if not ids_batch: continue
+        
+        # Calculate total for progress tracking
+        total_batches = len(all_batches)
+        SYNC_STATUS["total_vectors"] = sum(len(batch) for batch in all_batches if batch)
+        
+        for batch_idx, ids_batch in enumerate(all_batches):
+            if not ids_batch:
+                continue
             
             await process_batch(ids_batch)
             total_vectors_checked += len(ids_batch)
+            SYNC_STATUS["processed_vectors"] = total_vectors_checked
+            SYNC_STATUS["last_updated"] = datetime.now().isoformat()
             
             if total_vectors_checked % 100 == 0:
-                logger.info(f"Sync progress: {total_vectors_checked} vectors checked, {documents_found} documents found")
+                logger.info(f"📊 Sync progress: {total_vectors_checked}/{SYNC_STATUS['total_vectors']} vectors, {documents_found} documents")
                 gc.collect()
-                await asyncio.sleep(0.1) # Yield to event loop
-                
-        SYNC_STATUS = "completed"
-        logger.info(f"Database Sync Complete. Processed {total_vectors_checked} vectors.")
+                await asyncio.sleep(0.1)  # Yield to event loop
+        
+        SYNC_STATUS["status"] = "completed"
+        SYNC_STATUS["last_updated"] = datetime.now().isoformat()
+        logger.info(f"✅ Database Sync Complete! Processed {total_vectors_checked} vectors, found {documents_found} documents.")
         
     except Exception as e:
-        logger.error(f"Sync failed: {e}")
-        SYNC_STATUS = "error"
+        error_msg = str(e)
+        logger.error(f"❌ Sync failed: {error_msg}")
+        SYNC_STATUS["status"] = "error"
+        SYNC_STATUS["error"] = error_msg
+        SYNC_STATUS["last_updated"] = datetime.now().isoformat()
 
 
 @asynccontextmanager
@@ -258,12 +320,17 @@ class CSPMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "img-src 'self' data: https:; "
-            "font-src 'self' data:; "
+            "font-src 'self' data: https://fonts.gstatic.com; "
             "connect-src 'self' https://*;"
         )
+        # Standard Security Headers
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
 app.add_middleware(CSPMiddleware)
@@ -281,7 +348,7 @@ class UploadRequest(BaseModel):
     source: Optional[str] = None
     use_ai_tagging: Optional[bool] = False  # Default to False (keyword-based, FREE)
     ai_provider: Optional[str] = "ollama"  # "ollama" (FREE) or "openai" (paid)
-    ollama_model: Optional[str] = "llama3.1"  # Ollama model to use
+    ollama_model: Optional[str] = "llama3.3"  # Ollama model to use
 
 
 class QueryRequest(BaseModel):
@@ -303,7 +370,7 @@ class RetagRequest(BaseModel):
     """Request model for re-tagging existing documents"""
     document_titles: Optional[List[str]] = None  # None or empty = all documents
     ai_provider: Optional[str] = "ollama"  # "ollama" (FREE) or "openai" (paid)
-    ollama_model: Optional[str] = "llama3.1"  # Ollama model to use
+    ollama_model: Optional[str] = "llama3.3"  # Ollama model to use
     batch_size: Optional[int] = 50  # Process chunks in batches
 
 
@@ -429,7 +496,8 @@ def generate_answer(question: str, context_chunks: List[Dict[str, Any]], program
         if text:  # Only add non-empty chunks
             # Truncate individual chunks to 1500 chars max
             truncated_text = text[:1500] + "..." if len(text) > 1500 else text
-            chunk_text = f"[Source: {title}]\n{truncated_text}"
+            # Include source subtly to allow the AI to synthesize without prefixing every sentence with 'According to...'
+            chunk_text = f"---\n{truncated_text}\n(Library Note: {title})\n---"
             
             # Stop adding context if we exceed limit
             if total_context_chars + len(chunk_text) > MAX_CONTEXT_CHARS:
@@ -459,11 +527,12 @@ CONTEXT:
 QUESTION:
 {question}
 
-Provide a comprehensive answer that:
-1. Directly addresses the question
-2. Integrates relevant concepts from the context
-3. Offers practical application or next steps
-4. Maintains the appropriate depth for the {program_level} level
+Provide a comprehensive, authoritative, yet compassionate answer that:
+1. Speaks as a single, unified voice of wisdom—the voice of the Evolve Consciousness Engine.
+2. Synthesizes the information from the provided context into a cohesive whole. 
+3. Avoids phrases like "According to the source" or "One document says." Instead, present the knowledge as an integrated truth.
+4. Offers practical, direct application or next steps for the user's life.
+5. Maintains the appropriate depth for the {program_level} level without unnecessary technical citations.
 
 ANSWER:"""
 
@@ -551,6 +620,36 @@ async def health_check():
             "status": "unhealthy",
             "error": str(e)
         }
+
+
+@app.get("/sync-status")
+async def get_sync_status():
+    """Get the current status of the database sync process"""
+    return {
+        "sync_status": SYNC_STATUS,
+        "message": "Sync status retrieved successfully"
+    }
+
+
+@app.post("/sync-trigger")
+async def trigger_sync(background_tasks: BackgroundTasks):
+    """Manually trigger a database sync from Pinecone to SQLite"""
+    if SYNC_STATUS["status"] == "running":
+        return {
+            "status": "already_running",
+            "message": "Sync is already in progress",
+            "sync_status": SYNC_STATUS
+        }
+    
+    # Start sync in background
+    background_tasks.add_task(sync_database_with_pinecone)
+    
+    return {
+        "status": "started",
+        "message": "Database sync started in background. Check /sync-status for progress.",
+        "sync_status": SYNC_STATUS
+    }
+
 
 
 def clean_text_for_metadata(text: str) -> str:
@@ -727,7 +826,11 @@ async def upload_document(request: UploadRequest):
                         "all_subtle_bodies": detected_cats.get("subtle_bodies", []),
                         "all_addiction_types": detected_cats.get("addiction_type", []),
                         "all_planets": detected_cats.get("planets", []),
-                        "all_zodiac_signs": detected_cats.get("zodiac_signs", [])
+                        "all_zodiac_signs": detected_cats.get("zodiac_signs", []),
+                        
+                        # High Performance Markers
+                        "schema_version": 2,
+                        "chunk_size": CHUNK_SIZE
                     }
 
                     # Add program_level only if detected (addiction-specific content)
@@ -769,12 +872,13 @@ async def upload_document(request: UploadRequest):
 
         if total_uploaded > 0:
              # Add to local SQLite database so it appears in UI
-             # Use tags from the last batch as proxy for "has tags"
              has_tags = False
+             ai_provider = None
              if 'tags' in locals() and isinstance(tags, dict):
                  has_tags = bool(tags.get("tags"))
+                 ai_provider = tags.get("ai_provider")
              
-             database.add_document(request.title, total_chunks, has_tags)
+             database.add_document(request.title, total_chunks, has_tags, ai_provider=ai_provider, schema_version=2)
              logger.info(f"Added {request.title} to local SQLite database")
 
         return {
@@ -790,6 +894,65 @@ async def upload_document(request: UploadRequest):
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/upload-file")
+async def upload_file(
+    file: UploadFile = File(...),
+    use_ai_tagging: bool = Form(False),
+    ai_provider: str = Form("openai"),
+    ollama_model: str = Form("llama3.3")
+):
+    """
+    Upload a file (PDF, DOCX, TXT) and process it
+    """
+    try:
+        logger.info(f"Uploading file: {file.filename}")
+        
+        # Read file content
+        content = await file.read()
+        
+        # Extract text based on file type
+        filename_lower = file.filename.lower()
+        if filename_lower.endswith('.pdf'):
+            import pypdf
+            import io
+            pdf_reader = pypdf.PdfReader(io.BytesIO(content))
+            text = ""
+            for page in pdf_reader.pages:
+                text_content = page.extract_text()
+                if text_content:
+                    text += text_content + "\n"
+        elif filename_lower.endswith('.docx'):
+            import docx
+            import io
+            doc = docx.Document(io.BytesIO(content))
+            text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+        elif filename_lower.endswith(('.txt', '.md', '.markdown', '.csv')):
+            try:
+                text = content.decode('utf-8')
+            except UnicodeDecodeError:
+                # Fallback for other encodings
+                text = content.decode('latin-1')
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.filename}")
+        
+        # Use the existing upload logic
+        upload_request = UploadRequest(
+            title=file.filename,
+            source=file.filename,
+            text=text,
+            use_ai_tagging=use_ai_tagging,
+            ai_provider=ai_provider,
+            ollama_model=ollama_model
+        )
+        
+        return await upload_document(upload_request)
+        
+    except Exception as e:
+        logger.error(f"File upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.post("/query", response_model=QueryResponse)
@@ -1028,11 +1191,11 @@ async def get_uploaded_documents():
             logger.warning(f"list() failed, falling back to query: {list_error}")
             
             # Use query as fallback (may be inconsistent for large datasets)
-            query_vector = [0.0] * PINECONE_DIMENSION
+            query_vector = [0.1] * PINECONE_DIMENSION
             results = await pinecone_with_retry(
                 lambda: index.query(
                     vector=query_vector,
-                    top_k=10000,
+                    top_k=1000,
                     include_metadata=True
                 ),
                 max_retries=2,
@@ -1075,25 +1238,61 @@ async def get_uploaded_documents():
 @app.post("/check-duplicate")
 async def check_duplicate(request: DuplicateCheckRequest):
     """
-    Check if a document with this title already exists
+    Check if a document with this title already exists (with or without extension)
 
     Args:
         request: {"title": "document_name"}
 
     Returns:
-        {"exists": bool, "chunk_count": int}
+        {"exists": bool, "chunk_count": int, "title": str, "providers": list}
     """
     try:
-        title = request.get("title")
+        title = request.title
+        base_title = title
+        if '.' in title:
+            base_title = title.rsplit('.', 1)[0]
 
-        # Query Pinecone with metadata filter to find this title
-        query_vector = [0.0] * PINECONE_DIMENSION
+        # 1. Check SQLite first (fastest and canonical)
+        docs = database.get_all_documents()
+        matching_doc = None
+        for doc in docs:
+            doc_title = doc.get("title", "")
+            doc_base = doc_title.rsplit('.', 1)[0] if '.' in doc_title else doc_title
+            
+            # Compare lowercase base names or exact names
+            if doc_title.lower() == title.lower() or doc_base.lower() == base_title.lower():
+                matching_doc = doc
+                break
+
+        if matching_doc:
+            logger.info(f"Duplicate check matched SQLite: {matching_doc['title']}")
+            return {
+                "status": "success",
+                "exists": True,
+                "chunk_count": matching_doc.get("chunk_count", 0),
+                "title": matching_doc["title"],
+                "providers": [matching_doc.get("ai_provider")] if matching_doc.get("ai_provider") else []
+            }
+
+        # 2. Fallback/Double-check Pinecone with candidate titles using $in operator
+        candidate_titles = [
+            base_title,
+            base_title + ".pdf",
+            base_title + ".docx",
+            base_title + ".txt",
+            base_title + ".md",
+            title
+        ]
+        # De-duplicate list
+        candidate_titles = list(set(candidate_titles))
+
+        query_vector = [0.1] * PINECONE_DIMENSION
         results = await pinecone_with_retry(
             lambda: index.query(
                 vector=query_vector,
-                top_k=100,  # Get enough to count chunks
+                top_k=100,
                 include_metadata=True,
-                filter={"title": title}
+                filter={"title": {"$in": candidate_titles}}
             ),
             max_retries=2,
             timeout=10.0
@@ -1101,12 +1300,21 @@ async def check_duplicate(request: DuplicateCheckRequest):
 
         exists = len(results.matches) > 0
         chunk_count = len(results.matches) if exists else 0
+        found_title = results.matches[0].metadata.get('title', title) if exists else title
+        
+        providers = []
+        if exists:
+            for m in results.matches:
+                p = m.metadata.get('ai_provider')
+                if p and p not in providers:
+                    providers.append(p)
 
         return {
             "status": "success",
             "exists": exists,
             "chunk_count": chunk_count,
-            "title": title
+            "title": found_title,
+            "providers": providers
         }
 
     except asyncio.TimeoutError:
@@ -1134,7 +1342,7 @@ async def get_document_status():
     Unified Endpoint: Returns documents from SQLite DB.
     Zero-latency, no scanning.
     """
-    docs = database.get_documents()
+    docs = database.get_all_documents()
     stats = database.get_stats()
     
     # Format for frontend compatibility
@@ -1145,7 +1353,7 @@ async def get_document_status():
             "chunk_count": d['chunk_count'],
             "pass_1_status": "Complete" if d['has_keyword_tags'] else "Pending",
             "pass_2_status": d['ai_provider'] if d['ai_provider'] else "Pending",
-            "pass_3_status": "Complete" if d['status'] == 'analyzed' else "Pending",
+            "pass_3_status": "Complete" if (d['status'] == 'analyzed' or d.get('analysis_results')) else "Pending",
             "raw_providers": [d['ai_provider']] if d['ai_provider'] else [],
             "schema_version": d.get('schema_version', 1)
         })
@@ -1159,9 +1367,15 @@ async def get_document_status():
         "sync_status": SYNC_STATUS
     }
 
+@app.get("/sync-status")
+async def get_sync_status():
+    """Get the current status of the database sync"""
+    return SYNC_STATUS
+
 @app.post("/sync-db")
 async def trigger_sync():
     """Manually trigger database sync from Pinecone"""
+    # Run in background without blocking
     asyncio.create_task(sync_database_with_pinecone())
     return {"status": "started", "message": "Background sync started"}
 
@@ -1202,6 +1416,8 @@ def process_vector_metadata(metadata, documents_dict):
         doc['ai_providers'].add("PARTIAL_AI")
 
 
+
+
 async def run_retagging_task(document_titles_to_process: List[str], ai_provider: str, ollama_model: str, batch_size: int):
     """
     Background task to process tagging without blocking the API.
@@ -1210,6 +1426,9 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
     try:
         total_docs = len(document_titles_to_process)
         # Initialize RETAG_STATUS tracking
+        global RETAG_STATUS, TASK_STOP_SIGNAL
+        TASK_STOP_SIGNAL = False # Reset on start
+        
         RETAG_STATUS["total_documents"] = total_docs
         RETAG_STATUS["processed_documents"] = 0
         RETAG_STATUS["status"] = "running"
@@ -1222,14 +1441,19 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
         
         # Main Loop: Process one document at a time
         for title in document_titles_to_process:
+            if TASK_STOP_SIGNAL:
+                logger.info("Task stop signal received. Aborting re-tagging.")
+                RETAG_STATUS["status"] = "stopped"
+                break
+            
             database.update_status(title, "processing", ai_provider.upper())
             try:
                 # Get chunks for THIS document
-                query_vector = [0.0] * PINECONE_DIMENSION
+                query_vector = [0.1] * PINECONE_DIMENSION
                 results = await pinecone_with_retry(
                     lambda: index.query(
                         vector=query_vector,
-                        top_k=10000, 
+                        top_k=500, 
                         include_metadata=True,
                         filter={"title": title}
                     ),
@@ -1365,7 +1589,7 @@ async def run_retagging_task(document_titles_to_process: List[str], ai_provider:
                         
                 # Document complete
                 # PRESERVE STATUS: If it was already analyzed, keep it analyzed.
-                current_docs = database.get_documents()
+                current_docs = database.get_all_documents()
                 current_doc = next((d for d in current_docs if d['title'] == title), None)
                 final_status = "tagged"
                 # Force status to 'tagged' so it re-appears in "Analyze Pending" queue
@@ -1401,6 +1625,14 @@ async def get_retag_status():
     """Return current re‑tagging progress status."""
     return RETAG_STATUS
 
+@app.post("/stop-tasks")
+async def stop_tasks():
+    """Emergency stop for all background tasks (AI re-analysis and tagging)."""
+    global TASK_STOP_SIGNAL
+    TASK_STOP_SIGNAL = True
+    logger.warning("USER ISSUED EMERGENCY STOP SIGNAL FOR ALL TASKS.")
+    return {"status": "success", "message": "Emergency stop signal sent. Tasks will abort at next checkpoint."}
+
 @app.post("/retag-documents")
 async def retag_documents(request: RetagRequest, background_tasks: BackgroundTasks):
     """
@@ -1410,7 +1642,7 @@ async def retag_documents(request: RetagRequest, background_tasks: BackgroundTas
     try:
         ai_provider = request.ai_provider or "ollama"
 
-        ollama_model = request.ollama_model or "llama3.1"
+        ollama_model = request.ollama_model or "llama3.3"
         batch_size = request.batch_size or 50
         
         logger.info(f"Queueing re-tagging job for provider: {ai_provider}")
@@ -1421,7 +1653,7 @@ async def retag_documents(request: RetagRequest, background_tasks: BackgroundTas
             document_titles_to_process = request.document_titles
         else:
             # Fetch ALL titles from SQLite
-            all_docs = database.get_documents() 
+            all_docs = database.get_all_documents() 
             document_titles_to_process = [d["title"] for d in all_docs]
             
         if not document_titles_to_process:
@@ -1461,11 +1693,11 @@ async def delete_document(title: str):
     """
     try:
         # First, query to find all chunks with this title
-        query_vector = [0.0] * PINECONE_DIMENSION
+        query_vector = [0.1] * PINECONE_DIMENSION
         results = await pinecone_with_retry(
             lambda: index.query(
                 vector=query_vector,
-                top_k=10000,  # Get all chunks
+                top_k=500,  # Get all chunks
                 include_metadata=True,
                 filter={"title": title}
             ),
@@ -1601,13 +1833,13 @@ async def estimate_analysis_cost(request: Dict[str, Any]):
         # Query Pinecone based on analysis type
         # For now, we'll do a simple query - you can expand this later
         # This is a placeholder that gets recent vectors
-        query_vector = [0.0] * PINECONE_DIMENSION
+        query_vector = [0.1] * PINECONE_DIMENSION
 
         if analysis_type == "recent":
             results = await pinecone_with_retry(
                 lambda: index.query(
                     vector=query_vector,
-                    top_k=min(limit, 10000),
+                    top_k=min(limit, 500),
                     include_metadata=True
                 ),
                 max_retries=2,
@@ -1617,7 +1849,7 @@ async def estimate_analysis_cost(request: Dict[str, Any]):
             results = await pinecone_with_retry(
                 lambda: index.query(
                     vector=query_vector,
-                    top_k=10000,  # Max we can get in one query
+                    top_k=1000,  # Max reasonable pool for corpus-wide analysis
                     include_metadata=True
                 ),
                 max_retries=2,
@@ -1627,7 +1859,7 @@ async def estimate_analysis_cost(request: Dict[str, Any]):
             results = await pinecone_with_retry(
                 lambda: index.query(
                     vector=query_vector,
-                    top_k=10000,
+                    top_k=500,
                     include_metadata=True,
                     filter=filters or {}
                 ),
@@ -1671,26 +1903,223 @@ async def estimate_analysis_cost(request: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/analyze-documents")
-async def analyze_documents(request: AnalyzeRequest):
+async def update_pinecone_connections(title: str, connected_docs: List[str]):
+    """Update Pinecone vector metadata for all chunks of a document to store connected_docs"""
+    try:
+        logger.info(f"Updating Pinecone metadata for {title} with connections: {connected_docs}")
+        query_vector = [0.1] * PINECONE_DIMENSION
+        # Query Pinecone to get all chunks for this title
+        results = await pinecone_with_retry(
+            lambda: index.query(
+                vector=query_vector,
+                top_k=500,
+                filter={"title": title},
+                include_metadata=False
+            ),
+            max_retries=2,
+            timeout=15.0
+        )
+        
+        if results and results.matches:
+            for match in results.matches:
+                # Update metadata for each chunk ID
+                # Pinecone index.update allows partial metadata update
+                await pinecone_with_retry(
+                    lambda: index.update(id=match.id, set_metadata={"connected_docs": connected_docs}),
+                    max_retries=2,
+                    timeout=10.0
+                )
+            logger.info(f"Successfully updated Pinecone metadata for {len(results.matches)} chunks of {title}")
+    except Exception as e:
+        logger.error(f"Failed to update Pinecone metadata for {title}: {e}")
+
+
+async def run_analysis_task(documents: List[Dict[str, Any]], analysis_type: str, estimate: Dict[str, Any]):
     """
-    Run Claude second-pass analysis on documents in batches with budget enforcement.
+    Background task to run Claude analysis in batches.
+    Updates status and saves results incrementally to avoid timeouts.
+    """
+    global ANALYSIS_STATUS, TASK_STOP_SIGNAL
+    try:
+        total_docs = len(documents)
+        TASK_STOP_SIGNAL = False
+        
+        ANALYSIS_STATUS.update({
+            "total_documents": total_docs,
+            "processed_documents": 0,
+            "status": "running",
+            "error": None,
+            "last_updated": datetime.now().isoformat()
+        })
+        
+        logger.info(f"Background Analysis Started: {total_docs} documents")
+        
+        batch_size = 15
+        unique_titles = set()
+        
+        for start in range(0, len(documents), batch_size):
+            if TASK_STOP_SIGNAL:
+                logger.info("Task stop signal received. Aborting analysis.")
+                ANALYSIS_STATUS["status"] = "stopped"
+                break
+                
+            batch_docs = documents[start:start + batch_size]
+            
+            # Update status to 'processing' before calling Claude
+            for doc in batch_docs:
+                title = doc.get("title", "Unknown")
+                if title != "Unknown":
+                    database.update_status(title, "processing")
+            
+            # Call Claude analysis (wrapped in to_thread)
+            analysis = await asyncio.to_thread(claude_second_pass_analysis, batch_docs, batch_size=batch_size)
+            
+            # Check for errors in Claude's output
+            if isinstance(analysis, dict) and "error" in analysis:
+                logger.error(f"Claude analysis batch failed: {analysis['error']}")
+                # Mark as tagged again so they can be retried
+                for doc in batch_docs:
+                    title = doc.get("title", "Unknown")
+                    if title != "Unknown":
+                        database.update_status(title, "tagged")
+                continue
+            
+            # Save results and update status to 'analyzed' incrementally
+            # Map of possible identifiers to actual document titles in the batch
+            id_map = {}
+            for idx, d in enumerate(batch_docs):
+                d_title = d.get("title", "")
+                if d_title:
+                    # Map "DOC X" -> title
+                    id_map[f"doc {idx + 1}"] = d_title
+                    id_map[f"doc{idx + 1}"] = d_title
+                    # Map lowercase title -> title
+                    id_map[d_title.lower()] = d_title
+                    # Map title without extension -> title
+                    if '.' in d_title:
+                        id_map[d_title.rsplit('.', 1)[0].lower()] = d_title
+
+            # Helper function to resolve Claude's reference to actual document title
+            def resolve_title(ref: str) -> str:
+                if not ref:
+                    return ""
+                ref_clean = str(ref).strip().lower()
+                # 1. Check exact/base name mapping
+                if ref_clean in id_map:
+                    return id_map[ref_clean]
+                # 2. Check if ref is a substring of any doc title
+                for d_title in id_map.values():
+                    if ref_clean in d_title.lower() or d_title.lower() in ref_clean:
+                        return d_title
+                return ref
+
+            # Normalize all connections in Claude's output
+            normalized_connections = []
+            for c in analysis.get("suggested_connections", []):
+                doc_id_resolved = resolve_title(c.get("doc_id", ""))
+                relates_to_resolved = resolve_title(c.get("relates_to", ""))
+                connection_desc = c.get("connection", "")
+                
+                if doc_id_resolved and relates_to_resolved and doc_id_resolved != relates_to_resolved:
+                    normalized_connections.append({
+                        "doc_id": doc_id_resolved,
+                        "relates_to": relates_to_resolved,
+                        "connection": connection_desc
+                    })
+
+            for doc in batch_docs:
+                title = doc.get("title", "Unknown")
+                if title != "Unknown":
+                    unique_titles.add(title)
+                    logger.info(f"Marking document as analyzed and saving results: {title}")
+                    
+                    # Extract resolved connections for THIS document
+                    doc_connections = [
+                        {"relates_to": c["relates_to"] if c["doc_id"] == title else c["doc_id"], "connection": c["connection"]}
+                        for c in normalized_connections
+                        if c["doc_id"] == title or c["relates_to"] == title
+                    ]
+                    
+                    # Prepare analysis results for this document
+                    doc_analysis = {
+                        "cross_document_themes": analysis.get("cross_document_themes", []),
+                        "consciousness_patterns": analysis.get("consciousness_patterns", []),
+                        "suggested_connections": doc_connections,
+                        "synthesis_opportunities": analysis.get("synthesis_opportunities", []),
+                        "analyzed_at": datetime.now().isoformat(),
+                        "batch_info": {
+                            "batch_size": len(batch_docs),
+                            "analysis_type": analysis_type
+                        }
+                    }
+                    
+                    # Save JSON to SQLite
+                    database.save_analysis(title, doc_analysis)
+                    
+                    try:
+                        connected_titles = list(set([
+                            c["relates_to"] for c in doc_connections
+                        ]))
+                        if connected_titles:
+                            # Let's update Pinecone vector metadata for all chunks of this title!
+                            asyncio.create_task(update_pinecone_connections(title, connected_titles))
+                    except Exception as pc_err:
+                        logger.error(f"Failed to queue Pinecone metadata update for {title}: {pc_err}")
+            
+            # Update progress
+            ANALYSIS_STATUS["processed_documents"] += len(batch_docs)
+            ANALYSIS_STATUS["last_updated"] = datetime.now().isoformat()
+            
+            # Sleep briefly to yield execution and prevent rate limit issues
+            await asyncio.sleep(0.5)
+            
+        # Record spending
+        spending_tracker.record_analysis({
+            "analysis_type": analysis_type,
+            "document_count": len(documents),
+            "total_cost": estimate.get("total_cost", 0),
+            "input_tokens": estimate.get("total_input_tokens", 0),
+            "output_tokens": estimate.get("total_output_tokens", 0)
+        })
+        
+        if ANALYSIS_STATUS["status"] == "running":
+            ANALYSIS_STATUS["status"] = "completed"
+        
+        ANALYSIS_STATUS["last_updated"] = datetime.now().isoformat()
+        logger.info(f"✅ Background Analysis Complete! Processed {len(unique_titles)} documents.")
+        
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"❌ Background Analysis failed: {error_msg}")
+        ANALYSIS_STATUS["status"] = "error"
+        ANALYSIS_STATUS["error"] = error_msg
+        ANALYSIS_STATUS["last_updated"] = datetime.now().isoformat()
+
+
+@app.post("/analyze-documents")
+async def analyze_documents(request: AnalyzeRequest, background_tasks: BackgroundTasks):
+    """
+    Run Claude second-pass analysis on documents in background batches with budget enforcement.
     """
     try:
+        # Check if already running to prevent concurrent loops
+        if ANALYSIS_STATUS["status"] == "running":
+            raise HTTPException(status_code=400, detail="An analysis task is already running.")
+
         analysis_type = request.analysis_type or "recent"
         limit = request.limit or 50
         filters = request.filters
         selected_titles = request.selected_titles or []
 
         # Retrieve documents from Pinecone
-        query_vector = [0.0] * PINECONE_DIMENSION
+        query_vector = [0.1] * PINECONE_DIMENSION
         matches = []
 
         if analysis_type == "recent":
             results = await pinecone_with_retry(
                 lambda: index.query(
                     vector=query_vector,
-                    top_k=min(limit, 10000),
+                    top_k=min(limit, 500),
                     include_metadata=True
                 ),
                 max_retries=2,
@@ -1701,7 +2130,7 @@ async def analyze_documents(request: AnalyzeRequest):
             results = await pinecone_with_retry(
                 lambda: index.query(
                     vector=query_vector,
-                    top_k=10000,
+                    top_k=1000,
                     include_metadata=True
                 ),
                 max_retries=2,
@@ -1709,14 +2138,8 @@ async def analyze_documents(request: AnalyzeRequest):
             )
             matches = results.matches
         elif analysis_type == "pending":
-            # Fetch specifically documents that are NOT complete
-            # Logic: Query SQLite for pending docs, then fetch from Pinecone by title
-            # This fixes the issue where "pass_3_status" is not in Pinecone metadata
-            all_docs = database.get_documents()
-            # Filter matches "pass_3_status" != "Complete" -> status != 'analyzed'
-            pending_titles = [d['title'] for d in all_docs if d.get('status') != 'analyzed']
-            
-            # Respect limit
+            all_docs = database.get_all_documents()
+            pending_titles = [d['title'] for d in all_docs if d.get('status') != 'analyzed' and not d.get('analysis_results')]
             titles_to_process = pending_titles[:limit]
             logger.info(f"Found {len(pending_titles)} pending documents. Fetching top {len(titles_to_process)} from Pinecone.")
             
@@ -1725,7 +2148,7 @@ async def analyze_documents(request: AnalyzeRequest):
                     results = await pinecone_with_retry(
                         lambda: index.query(
                             vector=query_vector,
-                            top_k=10000,
+                            top_k=500,
                             filter={"title": title},
                             include_metadata=True
                         ),
@@ -1736,12 +2159,11 @@ async def analyze_documents(request: AnalyzeRequest):
                         matches.extend(results.matches)
                 except Exception as e:
                     logger.error(f"Failed to fetch pending document '{title}' from Pinecone: {e}")
-                    # Continue to next document
         elif analysis_type == "theme":
             results = await pinecone_with_retry(
                 lambda: index.query(
                     vector=query_vector,
-                    top_k=10000,
+                    top_k=500,
                     include_metadata=True,
                     filter=filters or {}
                 ),
@@ -1750,14 +2172,12 @@ async def analyze_documents(request: AnalyzeRequest):
             )
             matches = results.matches
         elif analysis_type == "selected":
-            # FIXED: Query each selected document individually to avoid top_k limitation
             if not selected_titles:
                 raise HTTPException(status_code=400, detail="No documents selected for analysis")
             
             logger.info(f"Retrieving {len(selected_titles)} selected documents for Claude analysis")
             
             for title in selected_titles:
-                # Query with title filter (no top_k limit when filtering)
                 results = await pinecone_with_retry(
                     lambda: index.query(
                         vector=query_vector,
@@ -1773,9 +2193,7 @@ async def analyze_documents(request: AnalyzeRequest):
             raise HTTPException(status_code=400, detail="Invalid analysis_type")
 
         # AGGREGATION LOGIC
-        # Group chunks by title and aggregate their tags to create a full document profile
         unique_matches_map = {}
-        
         for match in matches:
             if match and hasattr(match, "metadata") and match.metadata:
                 title = match.metadata.get("title", "Unknown")
@@ -1783,34 +2201,30 @@ async def analyze_documents(request: AnalyzeRequest):
                     continue
                     
                 if title not in unique_matches_map:
-                    # Initialize 
                     unique_matches_map[title] = {
                         "id": title, 
-                        "text_chunks": [], # Store chunks to sort later
+                        "text_chunks": [], 
                         "tags": set(match.metadata.get("tags", [])), 
                         "title": title
                     }
                 
-                # Always add text and tags
-                # Use chunk_index if available, otherwise just append
                 chunk_text = match.metadata.get("text", "")
-                chunk_idx = match.metadata.get("chunk_index", 0) # Assumes numeric index
+                chunk_idx = match.metadata.get("chunk_index", 0)
                 unique_matches_map[title]["text_chunks"].append((chunk_idx, chunk_text))
                 
                 existing_tags = unique_matches_map[title]["tags"]
                 new_tags = match.metadata.get("tags", [])
                 existing_tags.update(new_tags)
         
-        # Reconstruct full text and finalize documents
+        # Reconstruct full text
         documents = []
         for doc_data in unique_matches_map.values():
-            # Sort chunks by index to reconstruct reading order
             sorted_chunks = sorted(doc_data["text_chunks"], key=lambda x: x[0])
             full_text = "\n".join([c[1] for c in sorted_chunks])
             
             doc_data["text"] = full_text
             doc_data["tags"] = list(doc_data["tags"])
-            del doc_data["text_chunks"] # Cleanup
+            del doc_data["text_chunks"]
             
             documents.append(doc_data)
             
@@ -1823,8 +2237,7 @@ async def analyze_documents(request: AnalyzeRequest):
                 "documents_found": 0
             }
 
-        # Estimate cost using aggregated documents to be accurate
-        # We reconstruct a mock 'match' structure for the estimator
+        # Estimate cost
         mock_matches_for_est = [{"metadata": {"text": d["text"], "tags": d["tags"]}} for d in documents]
         estimate = estimate_claude_cost(mock_matches_for_est, batch_size=15)
 
@@ -1836,49 +2249,19 @@ async def analyze_documents(request: AnalyzeRequest):
                 "budget": budget_ok
             }
 
-        # Run analysis in batches of 15 documents
-        # Run analysis in batches of 15 documents
-        batch_size = 15
-        batch_results = []
-        unique_titles = set()
-        
-        for start in range(0, len(documents), batch_size):
-            batch_docs = documents[start:start + batch_size]
-            analysis = claude_second_pass_analysis(batch_docs, batch_size=batch_size)
-            
-            # Update status IMMEDIATELY for this batch so UI updates live
-            for doc in batch_docs:
-                title = doc.get("title", "Unknown")
-                if title != "Unknown":
-                    unique_titles.add(title)
-                    logger.info(f"Marking document as analyzed: {title}")
-                    database.update_status(title, "analyzed")
-            
-            batch_results.append({
-                "batch_start": start,
-                "batch_end": start + len(batch_docs) - 1,
-                "documents_analyzed": len(batch_docs),
-                "analysis": analysis
-            })
-
-        # Record spending
-        spending_tracker.record_analysis({
-            "analysis_type": analysis_type,
-            "document_count": len(documents),
-            "total_cost": estimate.get("total_cost", 0),
-            "input_tokens": estimate.get("total_input_tokens", 0),
-            "output_tokens": estimate.get("total_output_tokens", 0)
-        })
-
-        # (Status update loop removed from here as it's done incrementally above)
+        # Queue background task
+        background_tasks.add_task(
+            run_analysis_task, 
+            documents=documents, 
+            analysis_type=analysis_type, 
+            estimate=estimate
+        )
 
         return {
             "status": "success",
-            "analysis_type": analysis_type,
-            "documents_analyzed": len(unique_titles),
-            "estimate": estimate,
-            "batches": batch_results,
-            "unique_titles": list(unique_titles)
+            "message": f"Claude deep analysis for {len(documents)} documents started in background.",
+            "documents_analyzed": len(documents),
+            "estimate": estimate
         }
 
     except HTTPException:
@@ -1891,6 +2274,31 @@ async def analyze_documents(request: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/analysis-status")
+async def get_analysis_status():
+    """Get status of the background analysis task"""
+    return ANALYSIS_STATUS
+
+
+@app.get("/document-analysis/{title}")
+async def get_document_analysis(title: str):
+    """Retrieve saved deep analysis results for a document"""
+    try:
+        analysis = database.get_analysis(title)
+        if not analysis:
+            raise HTTPException(status_code=404, detail=f"Analysis not found for document: {title}")
+        return {
+            "status": "success",
+            "title": title,
+            "analysis": analysis
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
