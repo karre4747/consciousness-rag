@@ -4,6 +4,7 @@ from agents.metaphysics_agent import MetaphysicsAgent
 from agents.science_agent import ScienceAgent
 from agents.therapy_agent import TherapyAgent
 from agents.synthesis_agent import SynthesisAgent
+from agents.sponsor_agent import SponsorAgent
 
 __all__ = [
     "BaseAgent",
@@ -11,5 +12,6 @@ __all__ = [
     "MetaphysicsAgent",
     "ScienceAgent",
     "TherapyAgent",
-    "SynthesisAgent"
+    "SynthesisAgent",
+    "SponsorAgent"
 ]

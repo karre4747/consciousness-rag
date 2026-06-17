@@ -982,11 +982,13 @@ async def query_knowledge(request: QueryRequest):
             focus = "synthesis"
 
         # Import specialist agents
-        from agents import RecoveryAgent, MetaphysicsAgent, ScienceAgent, TherapyAgent, SynthesisAgent
+        from agents import RecoveryAgent, MetaphysicsAgent, ScienceAgent, TherapyAgent, SynthesisAgent, SponsorAgent
         
         # Instantiate agent based on focus area
         if focus == "recovery":
             agent = RecoveryAgent()
+        elif focus == "sponsor":
+            agent = SponsorAgent()
         elif focus == "metaphysics":
             agent = MetaphysicsAgent()
         elif focus == "science":
