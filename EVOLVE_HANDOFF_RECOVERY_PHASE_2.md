@@ -1,55 +1,63 @@
 # Evolve Consciousness Engine - Recovery Phase Handoff Document
 
-This document summarizes the changes, fixes, and current status of the Evolve Consciousness Engine as of June 15, 2026. Use this to resume work in a new chat.
+This document summarizes the changes, upgrades, and current status of the Evolve Consciousness Engine as of June 15, 2026. Use this to resume work in a new chat.
 
 ---
 
-## 1. Resolved Issues & Bug Fixes
+## 1. Accomplishments & System Upgrades (Current Session)
 
-### A. Claude Analysis `ValueError` (F-String Formatting)
-- **Problem**: Running Claude Analysis crashed with `ValueError: Invalid format specifier ' "Exact Document Title 1", "relates_to": "Exact Document Title 2", "connection": "why they connect"' for object of type 'str'`.
-- **Cause**: Literal JSON schema braces `{...}` inside a python f-string in [tagging.py](file:///Users/carriehuff/consciousness-RAG/consciousness-rag/backend/tagging.py) were parsed as f-string format expressions.
-- **Fix**: Escaped all literal JSON curly braces in the prompt template as `{{...}}`.
+### A. Vector Database Upgrade (3072 Dimensions)
+- **Problem**: The system was using the legacy `text-embedding-ada-002` model (1536 dimensions). To future-proof the database for the coaching app and scale beyond 17 documents, the embedding model needed to be modernized.
+- **Upgrade**: Upgraded to OpenAI's premium **`text-embedding-3-large`** model at **3072 dimensions** for maximum semantic resolution.
+- **Migration**: Created and ran `migrate_embeddings.py` which copied all existing 4,964 vectors from the old `evolve-consciousness` index, re-embedded them using the new 3072-dimension model, and uploaded them to a brand new index: **`evolve-consciousness-v3`**.
+- **Failsafe**: The original index remains fully active as a backup.
 
-### B. Completed Library "Loss of Status" (SQLite vs. Re-tagging)
-- **Problem**: When running a "Re-tag All" job, all documents in the database had their statuses reset to `'tagged'`. This caused completed documents to disappear from the **Completed Library** and lose their **👁️ View Analysis** buttons on the frontend.
-- **Fix**: Modified [main.py](file:///Users/carriehuff/consciousness-RAG/consciousness-rag/backend/main.py) to compute `"pass_3_status"` dynamically based on the presence of `analysis_results` text in SQLite rather than solely checking if `status == 'analyzed'`. This preserves completed Claude analysis visibility even if a document is undergoing re-tagging.
+### B. Configuration & Code Updates
+- **Dotenv Configuration (`backend/.env`)**:
+  - `EMBEDDING_MODEL=text-embedding-3-large`
+  - `PINECONE_INDEX_NAME=evolve-consciousness-v3`
+  - `PINECONE_DIMENSION=3072`
+- **Default Models**:
+  - Q&A Model: Kept premium **`gpt-4o`** for deep semantic synthesis.
+  - Deep Analysis: Kept premium **`claude-sonnet-4-5-20250929`** (Claude 4.5 Sonnet).
+  - Local Tagging (Ollama): Updated code defaults in `main.py` and `tagging.py` from `llama3.1` to the state-of-the-art **`llama3.3`** (70B).
 
-### C. Zero-Vector Pinecone Cosine Distance Bug (Earlier in Phase)
-- **Problem**: Querying Pinecone (configured with cosine distance) with `[0.0] * 1536` returned 0 results due to undefined cosine magnitude calculations.
-- **Fix**: Replaced zero-vectors in administrative query and update paths with `[0.1] * 1536`.
+### C. CT Handbook Deep Analysis
+- Ran the second-pass Claude analysis on `CT Handbook-Student Handbook-OCR.pdf`.
+- The 4.6KB report was successfully generated, parsed, and saved to the local SQLite database. The document's status is now `analyzed`.
+
+### D. GitHub Repository In Sync
+- All local code changes and the migration script have been committed locally and pushed to the remote GitHub repository on the **`agentic-version`** branch.
 
 ---
 
 ## 2. Current System State
 
 ### A. SQLite Database (`consciousness-rag/backend/consciousness.db`)
-- **Total Documents**: 17 documents in the database.
-- **Analyzed (with saved results)**: 13 documents.
-- **Pending Analysis**: 4 documents (recently uploaded).
-- **RAG Functionality**: Successfully verified with queries pulling data and synthesizing answers across multiple sources (e.g., *Scriptures Dictionary*, *Secret Doctrine*, and *Quantum Healing*).
+- **Total Documents**: 17 documents.
+- **Analyzed (Phase 3 Complete)**: 14 documents (now including `CT Handbook-Student Handbook-OCR.pdf`).
+- **Pending Analysis**: 3 documents.
 
 ### B. Backend Running Process
-- Running locally using python virtual environment: `/Users/carriehuff/consciousness-RAG/venv/bin/python main.py`
-- Active port: `8001` (Uvicorn)
-- Current task log: `/Users/carriehuff/.gemini/antigravity-ide/brain/96df42d2-8a03-4398-a1d9-c9bc0e0445bf/.system_generated/tasks/task-1313.log`
+- Running locally via Python virtual environment on port **`8001`**.
+- Active connections: Pinecone index `evolve-consciousness-v3` (3072 dims), OpenAI, and Anthropic are all connected and healthy.
 
 ---
 
-## 3. How to Resume in a New Chat
+## 3. How to Resume in a New Chat (Next Steps: Phase 2 Content Ingestion & Phase 3 Fine-Tuning)
 
-Copy and paste the following prompt as your first message in the new chat:
+When you start your next chat to proceed with the roadmap, copy and paste this prompt:
 
 ```text
-Hello! I am continuing work on the "Evolve Consciousness Engine." 
+Hello! I am continuing work on the "Evolve Consciousness Engine."
 
-Please review the transition documentation located at:
+Please review the handoff documentation located at:
 /Users/carriehuff/consciousness-RAG/consciousness-rag/EVOLVE_HANDOFF_RECOVERY_PHASE_2.md
 
-Key context:
-1. The backend dev server is currently running on port 8001 via venv.
-2. The SQLite database at /Users/carriehuff/consciousness-RAG/consciousness-rag/backend/consciousness.db tracks 17 documents (13 analyzed, 4 pending).
-3. We recently fixed f-string formatting crashes in tagging.py and status visibility issues during re-tagging.
+All today's model upgrades and database migration to the 3072-dimension index (evolve-consciousness-v3) are committed and pushed to the GitHub branch "agentic-version".
 
-Let's begin by checking the server log at /Users/carriehuff/consciousness-RAG/consciousness-rag/backend/server.log and verifying that the API is fully responsive.
+We are ready to continue Phase 2 (Content Ingestion) and move towards Phase 3 (Fine-Tuning). Specifically, we need to focus on:
+1. Resuming content ingestion (e.g. uploading Notion documents, organizing the three-tier curriculum, and creating the source attribution system).
+2. Planning dataset creation for fine-tuning our three coaching persona levels (beginner, intermediate, advanced).
+Please check the running server on port 8001 and review README.md to plan these tasks.
 ```

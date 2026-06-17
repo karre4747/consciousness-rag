@@ -958,12 +958,7 @@ async def upload_file(
 @app.post("/query", response_model=QueryResponse)
 async def query_knowledge(request: QueryRequest):
     """
-    Query the knowledge base using RAG
-    
-    This endpoint:
-    1. Generates embedding for the question
-    2. Searches Pinecone for relevant chunks
-    3. Uses Claude to generate a contextual answer
+    Query the knowledge base using RAG via domain-specific agents.
     """
     try:
         logger.info(f"Processing query: {request.question}")
@@ -972,98 +967,74 @@ async def query_knowledge(request: QueryRequest):
         requested_top_k = request.top_k or 5
         top_k = max(1, min(20, requested_top_k))
         
-        # Generate embedding for question
-        question_embedding = generate_embedding(request.question)
-        
-        # Build filter
-        filter_dict = {}
+        # Build filter focus
         raw_filters = request.filters or {}
-        
-        # Handle Focus Area mapping (Frontend sends 'focus_area', Pinecone needs specific fields)
+        focus = ""
         if "focus_area" in raw_filters:
             focus = raw_filters["focus_area"]
-            # Remove the raw key so we don't send invalid metadata to Pinecone
-            if focus == "12-step":
-                # Filter for docs that have ANY recovery focus
-                filter_dict["recovery_focus"] = {"$ne": ""}
-            elif focus == "chakras":
-                # Filter for docs that discuss chakras
-                filter_dict["primary_chakra"] = {"$ne": ""}
-            elif focus == "astrology":
-                filter_dict["tags"] = "Astrology"
-            elif focus == "mystical":
-                filter_dict["tags"] = "Mysticism"
+            
+        # Map legacy frontend filter values to new agent names
+        if focus == "12-step":
+            focus = "recovery"
+        elif focus in ["mystical", "astrology", "chakras"]:
+            focus = "metaphysics"
+        elif focus == "":
+            focus = "synthesis"
+
+        # Import specialist agents
+        from agents import RecoveryAgent, MetaphysicsAgent, ScienceAgent, TherapyAgent, SynthesisAgent
         
-        # Add program level if specified
-        if request.program_level:
-            filter_dict["program_level"] = request.program_level
+        # Instantiate agent based on focus area
+        if focus == "recovery":
+            agent = RecoveryAgent()
+        elif focus == "metaphysics":
+            agent = MetaphysicsAgent()
+        elif focus == "science":
+            agent = ScienceAgent()
+        elif focus == "therapy":
+            agent = TherapyAgent()
+        else:
+            agent = SynthesisAgent()
+
+        # Run agent query in a thread pool to avoid blocking async event loop
+        result = await asyncio.to_thread(agent.query, request.question, top_k=top_k)
         
-        # Query Pinecone (wrapped to prevent blocking)
-        query_response = await pinecone_with_retry(
-            lambda: index.query(
-                vector=question_embedding,
-                top_k=top_k,
-                include_metadata=True,
-                filter=filter_dict if filter_dict else None
-            ),
-            max_retries=2,
-            timeout=10.0
-        )
-        
-        # Extract matches
-        matches = query_response.matches
-        
-        if not matches:
-            return QueryResponse(
-                answer="I couldn't find relevant information in the knowledge base to answer your question. Please try rephrasing or asking about a different topic.",
-                sources=[],
-                metadata={"matches_found": 0}
-            )
-        
-        # Generate answer using Claude with timeout to avoid long-running requests
-        try:
-            answer = await asyncio.wait_for(
-                asyncio.to_thread(
-                    generate_answer,
-                    request.question,
-                    matches,
-                    request.program_level or "beginner"
-                ),
-                timeout=90
-            )
-        except asyncio.TimeoutError:
-            raise HTTPException(status_code=504, detail="Answer generation timed out. Please try again.")
+        if result["status"] == "error":
+            raise HTTPException(status_code=500, detail=result["answer"])
+            
+        matches = result.get("citations", [])
         
         # Format sources with full text and metadata for UI display
         sources = [
             {
-                "title": match.metadata.get("title", "Unknown"),
-                "source": match.metadata.get("source", "Unknown"),
-                "text": match.metadata.get("text", ""),
-                "score": match.score,
-                "tags": match.metadata.get("tags", []),
+                "title": match.get("title", "Unknown"),
+                "source": match.get("metadata", {}).get("source", "Unknown"),
+                "text": match.get("text", ""),
+                "score": match.get("score", 0.0),
+                "tags": match.get("tags", []),
                 "metadata": {
-                    "all_traditions": match.metadata.get("all_traditions", []),
-                    "all_teachers": match.metadata.get("all_teachers", []),
-                    "all_chakras": match.metadata.get("all_chakras", []),
-                    "all_12_steps": match.metadata.get("all_12_steps", []),
-                    "all_ascension_paths": match.metadata.get("all_ascension_paths", []),
-                    "all_planets": match.metadata.get("all_planets", []),
-                    "all_zodiac_signs": match.metadata.get("all_zodiac_signs", []),
-                    "primary_theme": match.metadata.get("primary_theme", ""),
-                    "consciousness_level": match.metadata.get("consciousness_level", ""),
+                    "all_traditions": match.get("metadata", {}).get("all_traditions", []),
+                    "all_teachers": match.get("metadata", {}).get("all_teachers", []),
+                    "all_chakras": match.get("metadata", {}).get("all_chakras", []),
+                    "all_12_steps": match.get("metadata", {}).get("all_12_steps", []),
+                    "all_ascension_paths": match.get("metadata", {}).get("all_ascension_paths", []),
+                    "all_planets": match.get("metadata", {}).get("all_planets", []),
+                    "all_zodiac_signs": match.get("metadata", {}).get("all_zodiac_signs", []),
+                    "primary_theme": match.get("metadata", {}).get("primary_theme", ""),
+                    "consciousness_level": match.get("metadata", {}).get("consciousness_level", ""),
                 }
             }
             for match in matches
         ]
         
         return QueryResponse(
-            answer=answer,
+            answer=result["answer"],
             sources=sources,
             metadata={
                 "matches_found": len(matches),
                 "program_level": request.program_level or "beginner",
-                "model": CLAUDE_MODEL
+                "model": "gpt-4o",
+                "agent": agent.name
             }
         )
         
@@ -1883,7 +1854,7 @@ async def estimate_analysis_cost(request: Dict[str, Any]):
                 "budget": spending_tracker.can_afford(0)
             }
 
-        estimate = estimate_claude_cost(documents, batch_size=15)
+        estimate = estimate_claude_cost(documents, batch_size=5)
 
         # Check budget
         budget_check = spending_tracker.can_afford(estimate['total_cost'])
@@ -1954,7 +1925,7 @@ async def run_analysis_task(documents: List[Dict[str, Any]], analysis_type: str,
         
         logger.info(f"Background Analysis Started: {total_docs} documents")
         
-        batch_size = 15
+        batch_size = 5
         unique_titles = set()
         
         for start in range(0, len(documents), batch_size):
@@ -2065,6 +2036,42 @@ async def run_analysis_task(documents: List[Dict[str, Any]], analysis_type: str,
                             asyncio.create_task(update_pinecone_connections(title, connected_titles))
                     except Exception as pc_err:
                         logger.error(f"Failed to queue Pinecone metadata update for {title}: {pc_err}")
+
+            # Update connections bi-directionally for any referenced documents that were NOT in the current batch
+            batch_titles_set = {d.get("title") for d in batch_docs if d.get("title")}
+            for c in normalized_connections:
+                doc_a = c["doc_id"]
+                doc_b = c["relates_to"]
+                conn_desc = c["connection"]
+                
+                # Check both source-target directions
+                for source_doc, target_doc in [(doc_a, doc_b), (doc_b, doc_a)]:
+                    if source_doc not in batch_titles_set:
+                        try:
+                            source_analysis = database.get_analysis(source_doc)
+                            if source_analysis:
+                                existing_conns = source_analysis.get("suggested_connections", [])
+                                exists = any(
+                                    str(conn.get("relates_to")).lower() == target_doc.lower()
+                                    for conn in existing_conns
+                                )
+                                if not exists:
+                                    logger.info(f"Adding bi-directional connection on existing doc {source_doc} -> {target_doc}")
+                                    existing_conns.append({
+                                        "relates_to": target_doc,
+                                        "connection": conn_desc
+                                    })
+                                    source_analysis["suggested_connections"] = existing_conns
+                                    source_analysis["last_updated_by_connection"] = datetime.now().isoformat()
+                                    database.save_analysis(source_doc, source_analysis)
+                                    
+                                    # Also update Pinecone metadata for this existing document to add the new connection
+                                    connected_titles = list(set([
+                                        conn["relates_to"] for conn in existing_conns
+                                    ]))
+                                    asyncio.create_task(update_pinecone_connections(source_doc, connected_titles))
+                        except Exception as upd_err:
+                            logger.error(f"Failed to update bi-directional connection on existing doc {source_doc}: {upd_err}")
             
             # Update progress
             ANALYSIS_STATUS["processed_documents"] += len(batch_docs)
@@ -2239,7 +2246,7 @@ async def analyze_documents(request: AnalyzeRequest, background_tasks: Backgroun
 
         # Estimate cost
         mock_matches_for_est = [{"metadata": {"text": d["text"], "tags": d["tags"]}} for d in documents]
-        estimate = estimate_claude_cost(mock_matches_for_est, batch_size=15)
+        estimate = estimate_claude_cost(mock_matches_for_est, batch_size=5)
 
         budget_ok = spending_tracker.can_afford(estimate.get("total_cost", 0))
         if not budget_ok.get("can_afford", True):

@@ -614,10 +614,8 @@ def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int
     Returns:
         Dict with enhanced semantic connections and relationships
     """
-
-    # Build context with FULL TEXT (up to reasonable safety limit per doc to allow batching)
-    # 200k tokens ~= 800k chars. 
-    # With batch_size=5, each doc gets ~30k chars (150k total) allowing ample room for response/overhead.
+    import json
+    # Build context with full text (up to reasonable safety limit per doc to allow batching)
     MAX_CHARS_PER_DOC = 30000
     limited_docs = documents[:batch_size]
     context = "\n\n---\n\n".join([
@@ -625,39 +623,62 @@ def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int
         for i, doc in enumerate(limited_docs)
     ])
 
+    # Fetch already analyzed documents from the database to suggest connections to existing files
+    existing_docs_context = ""
+    try:
+        import database
+        all_db_docs = database.get_all_documents()
+        analyzed_docs = []
+        batch_titles = {d.get('id') for d in limited_docs}.union({d.get('title') for d in limited_docs})
+        for d in all_db_docs:
+            title = d.get("title", "")
+            if d.get("status") == "analyzed" and d.get("analysis_results") and title not in batch_titles:
+                try:
+                    res = json.loads(d["analysis_results"])
+                    themes = res.get("cross_document_themes", [])[:3]  # limit to top 3 themes to keep prompt slim
+                    analyzed_docs.append(f'- "{title}" (Key Themes: {themes})')
+                except Exception:
+                    pass
+        if analyzed_docs:
+            existing_docs_context = "\n\nEXISTING REFERENCE LIBRARY (Already Analyzed in Database):\n" + "\n".join(analyzed_docs)
+    except Exception as e:
+        logger.error(f"Error fetching existing documents for reference context: {e}")
+
     prompt = f"""You are analyzing a consciousness and spiritual transformation database.
 
-Review these {len(limited_docs)} documents and identify:
-1. Deep thematic connections across documents
-2. Quantum/consciousness patterns
-3. Cross-tradition synthesis opportunities
-4. Missing semantic relationships
+Your task is to analyze the documents provided in the DOCUMENTS section and return a valid JSON object.
 
 CRITICAL REQUIREMENTS:
-- Return ONLY a valid JSON object.
+- Return ONLY a valid JSON object matching the exact schema below.
+- "cross_document_themes": Identify between 5 to 7 most significant themes. Provide a detailed, context-rich paragraph for each theme.
+- "consciousness_patterns": Identify between 5 to 7 consciousness patterns, explaining how they manifest across documents.
+- "synthesis_opportunities": Identify between 5 to 7 synthesis opportunities, explaining how these teachings integrate.
+- "suggested_connections": Suggest between 5 to 10 important connections. For each connection, provide a detailed 2 to 3 sentence explanation of the connection's nature and relevance.
 - Ensure all double quotes inside JSON string values are properly escaped (e.g. use \\" for nested quotes).
-- Do NOT include any trailing commas.
-- Do NOT include unescaped newlines within string values; use \\n for line breaks.
-- In suggested_connections, doc_id and relates_to MUST contain the exact document titles as provided in the square brackets below (e.g. "124685109-Quantum-Healing.pdf"), including their file extensions, numbers, and case sensitivity. Do not use shorthand index like "DOC 1".
+- Do NOT include any trailing commas or unescaped newlines.
+- In suggested_connections, doc_id and relates_to MUST contain the exact document titles as provided in the square brackets (e.g. "124685109-Quantum-Healing.pdf") or reference titles (e.g. "BHBY-CH-13.pdf") including their file extensions, numbers, and case sensitivity. Do not use shorthand index like "DOC 1".
 
-DOCUMENTS:
+DOCUMENTS TO ANALYZE:
 {context}
+{existing_docs_context}
 
 Return JSON matching this schema:
 {{
-  "cross_document_themes": ["theme1", "theme2"],
-  "consciousness_patterns": ["pattern1", "pattern2"],
+  "cross_document_themes": ["Detailed paragraph of theme 1", "Detailed paragraph of theme 2"],
+  "consciousness_patterns": ["Detailed explanation of pattern 1", "Detailed explanation of pattern 2"],
   "suggested_connections": [
-    {{"doc_id": "Exact Document Title 1", "relates_to": "Exact Document Title 2", "connection": "why they connect"}}
+    {{"doc_id": "Exact Document Title 1", "relates_to": "Exact Document Title 2", "connection": "Detailed 2-3 sentence explanation of why they connect"}}
   ],
-  "synthesis_opportunities": ["opportunity1"]
-}}"""
+  "synthesis_opportunities": ["Detailed explanation of opportunity 1"]
+}}
+
+REMEMBER: Return ONLY the JSON object. Do not explain anything else. Do not violate this format!"""
 
     try:
         client = get_anthropic_client()
         message = client.messages.create(
             model=os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022"),
-            max_tokens=2000,
+            max_tokens=4000,
             messages=[{"role": "user", "content": prompt}]
         )
 

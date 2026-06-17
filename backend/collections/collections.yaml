@@ -1,0 +1,63 @@
+collections:
+  addiction_recovery:
+    display_name: "Addiction Recovery & 12 Steps"
+    description: "Specialized material on substance/behavioral addictions and 12-step recovery."
+    subcategories:
+      - substances/alcohol
+      - substances/drugs
+      - substances/gambling
+      - behavioral/codependency
+      - behavioral/love_addiction
+      - 12_step_deep_dives/step_1
+      - 12_step_deep_dives/step_2
+      - 12_step_deep_dives/step_3
+      - 12_step_deep_dives/step_4
+      - 12_step_deep_dives/step_11
+      - recovery_stages/detox
+      - recovery_stages/early_recovery
+      - recovery_stages/spiritual_awakening
+  metaphysics:
+    display_name: "Metaphysics & Esoteric Wisdom"
+    description: "Teachings from classical spiritual paths and modern consciousness masters."
+    subcategories:
+      - traditions/hermetic
+      - traditions/kabbalah
+      - traditions/vedic
+      - traditions/buddhist
+      - traditions/taoist
+      - teachers/blavatsky
+      - teachers/goddard
+      - teachers/steiner
+      - teachers/murphy
+      - teachers/hawkins
+      - teachers/dispenza
+      - teachers/lipton
+      - teachers/leadbeater
+      - teachers/besant
+      - teachers/hall
+      - energy_systems/chakras
+      - energy_systems/meridians
+  science_bridge:
+    display_name: "Science Bridge"
+    description: "Bridging quantum mechanics, neurobiology, and consciousness studies."
+    subcategories:
+      - quantum_physics/consciousness_observer
+      - quantum_physics/quantum_brain
+      - neuroscience/addiction_neurobiology
+      - neuroscience/neuroplasticity
+      - neuroscience/trauma_brain
+      - consciousness_studies/academic_papers
+      - epigenetics
+  healing_modalities:
+    display_name: "Healing Modalities & Psychotherapy"
+    description: "Therapeutic approaches for mental, trauma, and somatic healing."
+    subcategories:
+      - therapy_types/cbt
+      - therapy_types/dbt
+      - therapy_types/emdr
+      - therapy_types/somatic
+      - trauma_work/childhood_patterns
+      - trauma_work/attachment_theory
+      - trauma_work/polyvagal_theory
+      - energy_healing/reiki
+      - energy_healing/breathwork

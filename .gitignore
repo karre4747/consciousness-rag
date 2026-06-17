@@ -29,3 +29,13 @@ env/
 # Temporary/scratch files
 Untitled
 count_stats*.py
+
+# Document Library (local only - PDFs/DOCX source files)
+library/
+!library/README.md
+
+# Agent architecture (code - should be committed)
+!backend/agents/
+!backend/skills/
+!backend/prompts/
+!backend/collections/
