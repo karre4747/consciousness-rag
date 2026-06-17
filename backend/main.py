@@ -976,13 +976,15 @@ async def query_knowledge(request: QueryRequest):
         # Map legacy frontend filter values to new agent names
         if focus == "12-step":
             focus = "recovery"
-        elif focus in ["mystical", "astrology", "chakras"]:
+        elif focus in ["mystical", "chakras"]:
+            focus = "spiritual"
+        elif focus == "astrology":
             focus = "metaphysics"
         elif focus == "":
             focus = "synthesis"
 
         # Import specialist agents
-        from agents import RecoveryAgent, MetaphysicsAgent, ScienceAgent, TherapyAgent, SynthesisAgent, SponsorAgent
+        from agents import RecoveryAgent, MetaphysicsAgent, ScienceAgent, TherapyAgent, SynthesisAgent, SponsorAgent, SpiritualAgent
         
         # Instantiate agent based on focus area
         if focus == "recovery":
@@ -991,6 +993,8 @@ async def query_knowledge(request: QueryRequest):
             agent = SponsorAgent()
         elif focus == "metaphysics":
             agent = MetaphysicsAgent()
+        elif focus == "spiritual":
+            agent = SpiritualAgent()
         elif focus == "science":
             agent = ScienceAgent()
         elif focus == "therapy":

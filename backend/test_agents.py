@@ -5,7 +5,7 @@ import os
 # Align python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from agents import RecoveryAgent, MetaphysicsAgent, ScienceAgent, TherapyAgent, SynthesisAgent, SponsorAgent
+from agents import RecoveryAgent, MetaphysicsAgent, ScienceAgent, TherapyAgent, SynthesisAgent, SponsorAgent, SpiritualAgent
 
 def test_query(agent_instance, query_text):
     print("\n" + "="*80)
@@ -35,15 +35,19 @@ def main():
     sponsor_agent = SponsorAgent()
     test_query(sponsor_agent, "I'm feeling like giving up and turning back. How do I handle this?")
     
-    # 3. Metaphysics Agent (Esoteric Wisdom)
+    # 3. Spiritual Advisor Agent (Eastern Wisdom & Energy systems)
+    spiritual_agent = SpiritualAgent()
+    test_query(spiritual_agent, "How can I use breathwork and chakra alignment to clear energetic blockages and deal with stress?")
+    
+    # 4. Metaphysics Agent (Esoteric Wisdom)
     metaphysics_agent = MetaphysicsAgent()
     test_query(metaphysics_agent, "What is the subconscious mind's role in transformation?")
     
-    # 4. Science Agent (Quantum & Neuroscience)
+    # 5. Science Agent (Quantum & Neuroscience)
     science_agent = ScienceAgent()
     test_query(science_agent, "Explain how neuroplasticity works in the brain.")
     
-    # 5. Synthesis Agent (Cross-Domain Bridge)
+    # 6. Synthesis Agent (Cross-Domain Bridge)
     synthesis_agent = SynthesisAgent()
     test_query(synthesis_agent, "How does the act of surrender in Step 3 relate to quantum physics?")
 

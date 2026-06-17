@@ -25,6 +25,10 @@ def get_collection_documents(collection_name: str) -> List[str]:
     Scans the local library folder structure if available,
     otherwise falls back to rule-based tag detection in the SQLite database.
     """
+    if collection_name == "spiritual":
+        # Combine documents from both metaphysics and healing_modalities
+        return list(set(get_collection_documents("metaphysics") + get_collection_documents("healing_modalities")))
+
     titles = []
     
     # 1. Try local folder structure scan (most accurate)
@@ -59,13 +63,13 @@ def get_collection_documents(collection_name: str) -> List[str]:
                     if any(w in title_lower for w in ["step", "sober", "aa-", "na-", "big-book", "recovery", "addiction", "substance", "boundaries"]):
                         matched_collection = "addiction_recovery"
                 elif collection_name == "metaphysics":
-                    if any(w in title_lower for w in ["kybalion", "mysticism", "theosophy", "blavatsky", "secret-doctrine", "goddard", "murphy", "subconscious", "astrology", "wisdom", "hermetica", "tesla", "thoth", "pineal"]):
+                    if any(w in title_lower for w in ["kybalion", "mysticism", "theosophy", "blavatsky", "secret-doctrine", "goddard", "murphy", "subconscious", "astrology", "wisdom", "hermetica", "tesla", "thoth", "pineal", "buddha", "buddhism", "hindu", "vedic", "kabbalah", "yoga", "zen", "kundalini", "meditation"]):
                         matched_collection = "metaphysics"
                 elif collection_name == "science_bridge":
                     if any(w in title_lower for w in ["quantum", "physics", "neuro", "brain", "epigenetics", "biology", "biophoton"]):
                         matched_collection = "science_bridge"
                 elif collection_name == "healing_modalities":
-                    if any(w in title_lower for w in ["dbt", "cbt", "therapy", "somatic", "trauma", "attachment", "inner-child", "breathwork"]):
+                    if any(w in title_lower for w in ["dbt", "cbt", "therapy", "somatic", "trauma", "attachment", "inner-child", "breathwork", "reiki", "energy", "chakra"]):
                         matched_collection = "healing_modalities"
                         
                 if matched_collection == collection_name:
