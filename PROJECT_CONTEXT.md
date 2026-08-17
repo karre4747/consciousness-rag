@@ -3,7 +3,7 @@
 > The "why" behind the technical decisions. Changes slowly. For system state
 > and known bugs, see `CLAUDE.md`.
 >
-> Last updated: August 16, 2026
+> Last updated: August 17, 2026
 
 ## What is being built
 
@@ -54,11 +54,58 @@ Four practitioners, each a distinct lens on the same corpus:
 - **Erica** — doctorate student in natural medicine (Quantum University); 500hr
   yoga teacher training; well-known Texas teacher, retreats; specialist in the
   quantum field and layers of subtle energy.
-- **12-Step colleague** — sponsors many; supplements the Steps with metaphysics
-  and heavy use of Joe Dispenza's work.
+- **Chad** — 12-Step sponsor; sponsors many; supplements the Steps with
+  metaphysics and heavy use of Joe Dispenza's work.
 
 These four are the first test of practitioner framing: the same query should
 answer in clinical language for Julie and energetic language for Erica.
+
+**Not built yet.** No practitioner lens exists in code — grep finds no reference
+to any of the four. What exists is seven *topic* agents (`backend/agents/`,
+personas in `backend/prompts/`), which slice by subject matter, not by who is
+asking. The lens layer is a separate, later piece; see `STATUS.md`.
+
+## Two audiences, decided (Aug 17)
+
+This is the key architectural distinction, and it simplifies a great deal:
+
+**Practitioners — Karre, Julie, Erica, Chad.** They log in and use the library as
+a **content-creation tool**. Julie prepares a lecture on CBT/DBT and the
+neuroscience behind it; Erica builds retreat material; Karre writes course
+content. Each gets their own voice because each is producing work in their own
+professional register. The prompt goal is *working material with verifiable
+citations*, not a warm therapeutic reply.
+
+The canonical request to design against, in Karre's words:
+
+> "Help me put together a 30-minute talk on CBT/DBT, the neuroscience behind it,
+> and how the step work integrates with that."
+
+Note what that is: a **brief**, not a question. It has a format, a duration, and
+three domains that must be braided. That is why retrieval must reach several
+domains deliberately rather than returning the fifteen passages nearest one
+phrasing.
+
+**Clients — the sponsorship app only.** Sponsor voice, pinned. No persona
+selection, no routing, no "ask the therapist". If a sponsee has a real therapy
+question they speak to Julie the human. Clients have no query access in the
+coaching app.
+
+### What this rules out
+
+- **Automatic routing** — unnecessary. Practitioners have accounts; the
+  sponsorship app is fixed to one voice. Nothing to infer.
+- **Client-facing persona selection** — not a feature.
+- **Naming voices after real people in client-facing surfaces** — a client must
+  never believe a licensed therapist reviewed a generated answer. Use role names
+  client-side; reserve personal attribution for content they actually authored.
+
+### Effect on the safety question
+
+The only client-facing surface is the sponsorship app in sponsor voice.
+Practitioners are licensed professionals using a research tool — a materially
+different risk profile. Crisis recognition still matters, but it is now **one
+bounded surface** rather than an open question across several apps.
 
 ## Framework mappings
 
