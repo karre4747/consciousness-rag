@@ -1,0 +1,4 @@
+# server.py uses the 1.x decorator API (@app.list_tools / @app.call_tool),
+# which mcp 2.0 removed. Pin until server.py is ported.
+mcp>=1.29,<2
+requests>=2.31
