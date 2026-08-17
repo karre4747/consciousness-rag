@@ -119,11 +119,6 @@ wired back in.
 four places; changing only the agent silently did nothing because `main.py`
 re-defaulted it.
 
-**4. `consciousness_level` metadata is unusable** — ~150 free-form values the
-tagging model invented (e.g. "Awareness of stress influences on animal
-behavior"). `recovery_focus` and `primary_chakra` ARE controlled and work as
-filters.
-
 **5. `consciousness_level` metadata is unusable** — ~150 free-form values the
 tagging model invented (e.g. "Awareness of stress influences on animal
 behavior"). `recovery_focus` and `primary_chakra` ARE controlled and work as

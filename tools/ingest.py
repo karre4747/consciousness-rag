@@ -44,6 +44,45 @@ EMBED_BATCH = 64
 UPSERT_BATCH = 50
 
 
+def record_in_sqlite(title: str, chunk_count: int, author: str = "",
+                     collection: str = "") -> None:
+    """
+    Mirror an ingested document into consciousness.db.
+
+    Pinecone is authoritative, but the UI and the MCP `list_documents` tool read
+    SQLite. Writing only Pinecone leaves them describing a library that no
+    longer exists, which reads as a failed ingest.
+    """
+    import sqlite3
+
+    db = os.path.join(BACKEND, "consciousness.db")
+    try:
+        conn = sqlite3.connect(db)
+        cur = conn.cursor()
+        cols = {r[1] for r in cur.execute("PRAGMA table_info(documents)")}
+        row = {
+            "title": title,
+            "chunk_count": chunk_count,
+            "status": "analyzed",
+            "ai_provider": "openai",
+        }
+        if "has_keyword_tags" in cols:
+            row["has_keyword_tags"] = 1
+        if "schema_version" in cols:
+            row["schema_version"] = 3
+
+        cur.execute("DELETE FROM documents WHERE title = ?", (title,))
+        names = ", ".join(row)
+        marks = ", ".join("?" * len(row))
+        cur.execute(f"INSERT INTO documents ({names}) VALUES ({marks})",
+                    list(row.values()))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        # A listing-cache failure must not abort an otherwise good ingest.
+        print(f"    warning: sqlite update failed for {title}: {e}")
+
+
 def safe_id(filename: str, chunk_index: int) -> str:
     """
     Build a Pinecone vector id that can be fetched back.
@@ -232,6 +271,10 @@ def main():
         for start in range(0, len(vectors), UPSERT_BATCH):
             index.upsert(vectors=vectors[start:start + UPSERT_BATCH])
             time.sleep(0.1)
+
+        # Keep the SQLite listing cache in step with the index.
+        record_in_sqlite(row["filename"], len(chunks), base.get("author", ""),
+                         base.get("collection", ""))
 
         ingested += 1
 
