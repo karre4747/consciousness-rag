@@ -12,9 +12,8 @@ import os
 from typing import Any, Optional
 
 import requests
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
+from mcp.server import MCPServer
+from mcp.types import TextContent
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,7 +27,15 @@ STATUS_ENDPOINT = f"{BACKEND_URL}/document-status"
 DEFAULT_TOP_K = 15  # matches BaseAgent; 5 is too thin for cross-domain synthesis
 
 # Initialize MCP server
-app = Server("evolve-consciousness-mcp")
+app = MCPServer(
+    "evolve-consciousness-mcp",
+    version="2.0.0",
+    instructions=(
+        "Access to Karre Huff's consciousness library: recovery, metaphysics, "
+        "neuroscience and therapeutic modalities. Retrieval spans the whole "
+        "corpus, so answers may braid several traditions."
+    ),
+)
 
 
 def build_filters(focus_area: Optional[str] = None) -> dict[str, Any]:
@@ -163,227 +170,101 @@ def format_response(data: dict[str, Any]) -> str:
     return "\n".join(output)
 
 
-@app.list_tools()
-async def list_tools() -> list[Tool]:
+QUERY_DESC = """Query the evolveAI consciousness library for research on spiritual development, recovery, and mystical wisdom.
+
+Covers 12-Step recovery, mysticism and contemplative traditions, chakras and
+subtle energy, astrology, quantum consciousness, neuroscience, and therapeutic
+modalities (CBT, DBT, EMDR, somatic work).
+
+Retrieval searches the entire corpus from several angles at once, so results
+deliberately span domains -- useful for course creation, lecture prep, and
+finding connections between recovery practice and other traditions."""
+
+
+@app.tool(name="query_consciousness_library", description=QUERY_DESC)
+async def query_consciousness_library(
+    question: str,
+    focus_area: str = "all",
+    top_k: int = DEFAULT_TOP_K,
+) -> str:
     """
-    List available tools.
-
-    Returns:
-        List of available MCP tools
-    """
-    return [
-        Tool(
-            name="query_consciousness_library",
-            description="""Query the evolveAI consciousness library for research on spiritual development, recovery, and mystical wisdom.
-
-This tool provides access to a comprehensive database covering:
-- **12-Step Recovery**: All 12 steps, recovery principles, spiritual awakening in addiction recovery
-- **Mysticism & Spirituality**: Various mystical traditions (Christian, Sufi, Buddhist, Hindu, Jewish, etc.), contemplative practices, mystical experiences
-- **Chakras & Energy**: Seven chakra system, energy centers, kundalini, subtle body anatomy
-- **Astrology**: Planetary influences, astrological symbolism, cosmic consciousness
-- **Quantum Consciousness**: Quantum physics and consciousness, reality creation, observer effect
-
-Perfect for:
-- Course creation and curriculum development
-- Research on consciousness and spiritual development
-- Finding connections between recovery and mystical traditions
-- Exploring chakra-based healing approaches
-- Understanding astrological influences on consciousness
-- Investigating quantum perspectives on awareness
-
-The library contains teachings from spiritual masters, recovery literature, mystical texts, and consciousness research.""",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "The research question or topic you want to explore. Be specific and detailed for best results."
-                    },
-                    "focus_area": {
-                        "type": "string",
-                        "enum": ["all", "12_steps", "mysticism", "chakras", "astrology", "quantum"],
-                        "description": "Optional: Filter results to a specific area of focus. Use 'all' or omit for unrestricted search.",
-                        "default": "all"
-                    },
-                    "top_k": {
-                        "type": "integer",
-                        "description": "Number of relevant sources to retrieve (default: 5, max recommended: 10)",
-                        "default": DEFAULT_TOP_K,
-                        "minimum": 1,
-                        "maximum": 20
-                    }
-                },
-                "required": ["question"]
-            }
-        ),
-        Tool(
-            name="list_documents",
-            description="List all available documents in the consciousness library to see what can be queried.",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            }
-        )
-    ]
-
-
-@app.call_tool()
-async def call_tool(name: str, arguments: Any) -> list[TextContent | ImageContent | EmbeddedResource]:
-    """
-    Handle tool calls.
-
     Args:
-        name: Name of the tool to call
-        arguments: Arguments for the tool
-
-    Returns:
-        List of content items (text, images, or embedded resources)
+        question: The research question or topic. Be specific for best results.
+        focus_area: Optional lens: all, 12_steps, mysticism, chakras, astrology, quantum.
+        top_k: Number of sources to retrieve (1-25).
     """
-    if name == "query_consciousness_library":
-        # Extract arguments
-        question = arguments.get("question")
-        if not question:
-            raise ValueError("Question is required")
-
-        focus_area = arguments.get("focus_area", "all")
-        top_k = arguments.get("top_k", DEFAULT_TOP_K)
-
-        # Validate top_k
-        if top_k < 1 or top_k > 20:
-            top_k = DEFAULT_TOP_K
-
-        # Build request payload
-        payload = {
-            "question": question,
-            "top_k": top_k
-        }
-
-        # Add filters if focus area is specified
-        filters = build_filters(focus_area)
-        if filters:
-            payload["filters"] = filters
-
-        logger.info(f"Querying consciousness library: question='{question}', focus_area='{focus_area}', top_k={top_k}")
-
-        try:
-            # Make request to backend API
-            # Increased timeout to 120s to accommodate Claude answer generation (up to 90s)
-            response = requests.post(
-                QUERY_ENDPOINT,
-                json=payload,
-                timeout=120
-            )
-            response.raise_for_status()
-
-            # Parse response
-            data = response.json()
-
-            # Format the response
-            formatted_output = format_response(data)
-
-            logger.info(f"Successfully retrieved results for question: '{question}'")
-
-            return [
-                TextContent(
-                    type="text",
-                    text=formatted_output
-                )
-            ]
-
-        except requests.exceptions.Timeout:
-            error_msg = "Request to consciousness library timed out. Please try again."
-            logger.error(error_msg)
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Error: {error_msg}"
-                )
-            ]
-
-        except requests.exceptions.ConnectionError:
-            error_msg = f"Could not connect to consciousness library at {BACKEND_URL}. Please check if the service is running."
-            logger.error(error_msg)
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Error: {error_msg}"
-                )
-            ]
-
-        except requests.exceptions.HTTPError as e:
-            error_msg = f"HTTP error occurred: {e.response.status_code} - {e.response.text}"
-            logger.error(error_msg)
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Error: {error_msg}"
-                )
-            ]
-
-        except json.JSONDecodeError:
-            error_msg = "Failed to parse response from consciousness library. Invalid JSON received."
-            logger.error(error_msg)
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Error: {error_msg}"
-                )
-            ]
-
-        except Exception as e:
-            error_msg = f"Unexpected error occurred: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Error: {error_msg}"
-                )
-            ]
-
-    # Handle list_documents tool
-    elif name == "list_documents":
-        try:
-            # Query the fast SQLite-backed endpoint
-            response = requests.get(STATUS_ENDPOINT, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            docs = data.get("documents", [])
-            total = data.get("total_documents", 0)
-            
-            # Format as a list
-            doc_list = []
-            for d in docs:
-                status = "✅"
-                if d.get("pass_3_status") != "Complete":
-                    status = "⚠️"
-                doc_list.append(f"- {status} **{d['title']}** ({d['chunk_count']} chunks)")
-            
-            formatted_list = f"## Available Documents ({total})\n\n" + "\n".join(doc_list)
-            
-            return [
-                TextContent(
-                    type="text",
-                    text=formatted_list
-                )
-            ]
-            
-        except Exception as e:
-            return [TextContent(type="text", text=f"Error listing documents: {str(e)}")]
-
-    raise ValueError(f"Unknown tool: {name}")
+    return await _do_query(question, focus_area, top_k)
 
 
-async def main():
-    """Main entry point for the MCP server."""
-    async with stdio_server() as (read_stream, write_stream):
-        logger.info("Starting evolveAI Consciousness MCP Server")
-        await app.run(
-            read_stream,
-            write_stream,
-            app.create_initialization_options()
+@app.tool(
+    name="list_documents",
+    description="List all documents available in the consciousness library.",
+)
+async def list_documents() -> str:
+    """Return the library's document inventory."""
+    return await _do_list_documents()
+
+
+async def _do_query(question: str, focus_area: str = "all",
+                    top_k: int = DEFAULT_TOP_K) -> str:
+    """Call the backend /query endpoint and format the result."""
+    if not question:
+        raise ValueError("Question is required")
+
+    if top_k < 1 or top_k > 25:
+        top_k = DEFAULT_TOP_K
+
+    payload = {"question": question, "top_k": top_k}
+    filters = build_filters(focus_area)
+    if filters:
+        payload["filters"] = filters
+
+    logger.info(f"query: {question[:60]!r} focus={focus_area} top_k={top_k}")
+
+    try:
+        # Generation can take up to ~90s; keep the client timeout above it.
+        response = await asyncio.to_thread(
+            requests.post, QUERY_ENDPOINT, json=payload, timeout=120
         )
+        response.raise_for_status()
+        return format_response(response.json())
+
+    except requests.exceptions.Timeout:
+        return "Error: request to the consciousness library timed out."
+    except requests.exceptions.ConnectionError:
+        return (f"Error: could not connect to the consciousness library at "
+                f"{BACKEND_URL}. Is the backend running on port 8001?")
+    except requests.exceptions.HTTPError as e:
+        return f"Error: HTTP {e.response.status_code} - {e.response.text[:200]}"
+    except json.JSONDecodeError:
+        return "Error: invalid JSON received from the consciousness library."
+    except Exception as e:
+        logger.error("unexpected error", exc_info=True)
+        return f"Error: {e}"
+
+
+async def _do_list_documents() -> str:
+    """Call the backend /document-status endpoint and format the inventory."""
+    try:
+        response = await asyncio.to_thread(
+            requests.get, STATUS_ENDPOINT, timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        docs = data.get("documents", [])
+        total = data.get("total_documents", 0)
+        lines = []
+        for d in docs:
+            mark = "OK" if d.get("pass_3_status") == "Complete" else "--"
+            lines.append(f"- [{mark}] **{d['title']}** ({d['chunk_count']} chunks)")
+        return f"## Available Documents ({total})\n\n" + "\n".join(lines)
+
+    except Exception as e:
+        return f"Error listing documents: {e}"
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # mcp 2.x manages the stdio transport itself; no manual stream plumbing.
+    logger.info("Starting evolveAI Consciousness MCP Server")
+    asyncio.run(app.run_stdio_async())
