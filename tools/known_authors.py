@@ -140,6 +140,43 @@ RECOVERY_WORKSHEET_TERMS = [
 ]
 
 
+# Material from Karre's other business interests that must never enter the
+# consciousness library. Real-estate and creative-finance documents share a
+# drive with the source material and otherwise slip through on generic words
+# like "study guide" or "case study".
+EXCLUDE_PATTERNS = [
+    "subto", "sub-to", "sub to ", "creative financ", "seller financ",
+    "wholesal", "real estate", "foreclos", "lease option", "land contract",
+    "tax lien", "escrow", "deal case study", "cost summary", "laptop list",
+    "auction list", "offering ",
+    "katie-j", "katie j",  # named client notes, not source material
+    # Records from Karre's former electronics-recycling company. These match
+    # library vocabulary by coincidence -- chemical safety sheets contain
+    # "alcohol", warehouse records contain "inventory" -- so they must be
+    # excluded by name rather than by topic.
+    "isopropyl", "swan 70", "clean product", "inbound inventory",
+    "safety data sheet", "msds", "voluntary withdrawal",
+]
+
+
+def is_excluded(path: str) -> bool:
+    """True for documents that must be kept out of the library entirely."""
+    import os
+    import re
+
+    low = path.lower()
+    if any(p in low for p in EXCLUDE_PATTERNS):
+        return True
+
+    # "Deal" as a standalone word marks real-estate material, but must not
+    # catch words that merely contain it ("dealing", "idealism").
+    name = os.path.splitext(os.path.basename(low))[0]
+    if re.search(r"\bdeal\b", name):
+        return True
+
+    return False
+
+
 def is_own_worksheet(path: str) -> bool:
     """True for worksheets on recovery topics, which Karre authored herself."""
     low = path.lower()

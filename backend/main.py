@@ -356,7 +356,7 @@ class QueryRequest(BaseModel):
     question: str
     program_level: Optional[str] = None
     filters: Optional[Dict[str, Any]] = None
-    top_k: Optional[int] = 5
+    top_k: Optional[int] = 15
 
 
 class QueryResponse(BaseModel):
@@ -963,9 +963,11 @@ async def query_knowledge(request: QueryRequest):
     try:
         logger.info(f"Processing query: {request.question}")
 
-        # Validate and clamp top_k to prevent slow queries
-        requested_top_k = request.top_k or 5
-        top_k = max(1, min(20, requested_top_k))
+        # Validate and clamp top_k to prevent slow queries. Defaults to 15:
+        # cross-domain synthesis needs passages from several works, and 5 is
+        # too thin to braid traditions.
+        requested_top_k = request.top_k or 15
+        top_k = max(1, min(25, requested_top_k))
         
         # Build filter focus
         raw_filters = request.filters or {}

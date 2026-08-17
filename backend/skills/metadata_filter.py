@@ -6,9 +6,11 @@ from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# Base path for local library folder
+# BASE_DIR is the backend/ directory (consciousness.db lives here).
+# REPO_DIR is one level up — library/ lives at the repo root, not under backend/.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LIBRARY_DIR = os.path.join(BASE_DIR, "library")
+REPO_DIR = os.path.dirname(BASE_DIR)
+LIBRARY_DIR = os.path.join(REPO_DIR, "library")
 DB_PATH = os.path.join(BASE_DIR, "consciousness.db")
 
 # Mapping of collection names to subfolders

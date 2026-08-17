@@ -5,8 +5,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 # Import RAG skills
-from skills.semantic_search import query_vector_db
-from skills.metadata_filter import get_pinecone_filter
+from skills.multi_angle import multi_angle_search
 from skills.citation_builder import build_citations
 
 logger = logging.getLogger(__name__)
@@ -39,16 +38,24 @@ class BaseAgent:
         logger.warning(f"Persona file not found at {persona_path}. Using empty persona.")
         return ""
         
-    def query(self, query_text: str, top_k: int = 5) -> Dict[str, Any]:
+    def query(self, query_text: str, top_k: int = 15) -> Dict[str, Any]:
         """
-        Execute collection-filtered semantic search and generate a persona-tailored response.
+        Search the WHOLE library and answer in this agent's voice.
+
+        Collections used to be walls: each agent was filtered to one, so the
+        recovery agent structurally could not retrieve neuroscience and the
+        science agent could not retrieve inventory practice. That made the
+        library's core promise -- cross-domain synthesis -- impossible.
+
+        Retrieval is now unfiltered. The collection becomes a lens on the
+        answer (voice, emphasis, which sources lead) rather than a limit on
+        what can be found. top_k is 15 rather than 5 because braiding three
+        traditions needs passages from more than one book.
         """
         try:
-            # 1. Get collection-based metadata filters
-            filter_dict = get_pinecone_filter(self.collection_name)
-            
-            # 2. Query Pinecone vector database
-            matches = query_vector_db(query_text, top_k=top_k, filter_dict=filter_dict)
+            # Search the entire corpus from several angles; the persona shapes
+            # the response but never limits what can be found.
+            matches = multi_angle_search(query_text, top_k=top_k)
             
             if not matches:
                 return {
@@ -58,10 +65,26 @@ class BaseAgent:
                     "citations": []
                 }
                 
-            # 3. Build context string from matches
+            # 3. Build context, surfacing author/tradition/framework metadata.
+            # Without this the model sees only filenames and cannot tell that
+            # two passages come from different traditions -- which is exactly
+            # the connection it is being asked to make.
             context_parts = []
             for m in matches:
-                context_parts.append(f"Source Document: {m['title']}\nChunk Snippet:\n{m['text']}")
+                md = m.get("metadata", {}) or {}
+                label = md.get("display_title") or m["title"]
+                bits = [f"Source: {label}"]
+                if md.get("author"):
+                    bits.append(f"Author: {md['author']}")
+                if md.get("collection"):
+                    bits.append(f"Domain: {md['collection']}")
+                if md.get("steps"):
+                    bits.append(f"12-Step: {', '.join(md['steps'])}")
+                if md.get("chakras"):
+                    bits.append(f"Chakra: {', '.join(md['chakras'])}")
+                if md.get("framework_links"):
+                    bits.append(f"Parallels: {', '.join(md['framework_links'])}")
+                context_parts.append(" | ".join(bits) + f"\n{m['text']}")
             context_str = "\n\n---\n\n".join(context_parts)
             
             # 4. Construct prompt with context
@@ -76,7 +99,20 @@ USER QUESTION:
 {query_text}
 
 INSTRUCTIONS:
-Formulate a comprehensive, highly insightful response to the user's question using the reference context above. Speak with the authority, tone, and directives specified in your persona. Do not make up facts. Focus on practical insights and cross-domain synthesis.
+Answer the user's question in the voice, authority and tone of your persona.
+
+The sources above deliberately span several traditions -- recovery, metaphysics,
+neuroscience, therapeutic practice. Many describe the SAME movement in different
+vocabularies. Where the sources genuinely support it, show that connection:
+name the parallel and say what it reveals. The 12-Step / chakra / framework
+labels above mark where such parallels exist.
+
+Lead with what the user actually asked. Bring in other traditions when they
+illuminate the answer, not as a survey -- a knowledgeable friend making a
+connection, not a lecture covering every angle.
+
+Ground every claim in the sources and attribute by author or work. Do not
+invent facts, and do not force a connection the sources do not support.
 
 ANSWER:"""
 
