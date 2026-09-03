@@ -35,6 +35,9 @@ import database
 from tagging import claude_second_pass_analysis
 from pinecone import Pinecone
 
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from ingest import safe_id  # vector ids are sanitized on ingest; raw titles fetch nothing
+
 CHECKPOINT_FILE = os.path.join(REPO, "tools", "analysis_checkpoint.json")
 
 def load_checkpoint():
@@ -84,12 +87,15 @@ def main():
             chunk_count = d.get("chunk_count", 1)
             # Fetch up to 5 representative chunks (first, middle, last)
             indices = list(dict.fromkeys([0, chunk_count // 4, chunk_count // 2, (3 * chunk_count) // 4, max(0, chunk_count - 1)]))
-            vector_ids = [f"{title}-{idx}" for idx in indices if idx < chunk_count]
+            vector_ids = [safe_id(title, idx) for idx in indices if idx < chunk_count]
             
             try:
                 fetched = index.fetch(ids=vector_ids)
                 texts = [vec.metadata.get("text", "") for vid, vec in fetched.vectors.items() if vec.metadata]
-                combined_text = "\n\n".join(texts)
+                combined_text = "\n\n".join(texts).strip()
+                if not combined_text:
+                    print(f"  ⚠️  No text fetched for {title} (ids like {vector_ids[0] if vector_ids else '?'}); skipping", flush=True)
+                    continue
                 doc_payloads.append({
                     "id": title,
                     "title": title,
@@ -110,9 +116,9 @@ def main():
             print(f"  ❌ Claude Analysis Error: {analysis_result['error']}", flush=True)
             continue
 
-        # Save analysis to database for each document in the batch
-        for d in batch:
-            title = d["title"]
+        # Save analysis to database for each document that actually had text
+        for p in doc_payloads:
+            title = p["title"]
             database.save_analysis(title, analysis_result)
             completed_set.add(title)
 

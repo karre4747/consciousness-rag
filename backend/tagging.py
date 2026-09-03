@@ -603,6 +603,41 @@ async def generate_tags(text: str, use_ai: bool = False, ai_provider: str = "oll
     return keyword_tags
 
 
+
+def repair_json_quotes(s: str) -> str:
+    """Escape double quotes that appear inside JSON string values.
+
+    Claude occasionally writes prose like: the "I" in the Fabric — inside a
+    string value without escaping. Walk the text tracking string state; a
+    closing quote is only accepted if the next non-space char is structural
+    (: , } ]), otherwise the quote is literal content and gets escaped.
+    Valid JSON passes through unchanged.
+    """
+    out = []
+    in_str = False
+    i = 0
+    n = len(s)
+    while i < n:
+        c = s[i]
+        if in_str:
+            if c == '\\':
+                out.append(s[i:i + 2]); i += 2; continue
+            if c == '"':
+                j = i + 1
+                while j < n and s[j] in ' \t\r\n':
+                    j += 1
+                if j >= n or s[j] in ':,}]':
+                    in_str = False
+                    out.append(c)
+                else:
+                    out.append('\\"')
+                i += 1; continue
+            out.append(c); i += 1; continue
+        if c == '"':
+            in_str = True
+        out.append(c); i += 1
+    return ''.join(out)
+
 def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int = 5) -> Dict[str, Any]:
     """
     PASS 2: Claude analyzes ALL documents together to find deep connections
@@ -706,9 +741,15 @@ REMEMBER: Return ONLY the JSON object. Do not explain anything else. Do not viol
                 cleaned = re.sub(r',\s*([\]}])', r'\1', json_str)
                 # Remove control chars (like raw newlines) in string values can be tricky,
                 # but let's try parsing the cleaned JSON string first
-                analysis = json.loads(cleaned)
-                logger.info("JSON successfully parsed after cleaning trailing commas!")
-                return analysis
+                try:
+                    analysis = json.loads(cleaned)
+                    logger.info("JSON successfully parsed after cleaning trailing commas!")
+                    return analysis
+                except json.JSONDecodeError:
+                    # Unescaped quotes inside string values are the other common failure
+                    analysis = json.loads(repair_json_quotes(cleaned))
+                    logger.info("JSON successfully parsed after escaping stray quotes!")
+                    return analysis
             except Exception as e2:
                 logger.error(f"JSON recovery failed. Error: {e2}\nRaw JSON string extracted:\n{json_str}\nFull Response text:\n{response_text}")
                 return {"error": f"JSON parse error: {str(e)}"}
