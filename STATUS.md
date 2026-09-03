@@ -143,6 +143,16 @@ blocks release.
 
 ## Deferred, deliberately
 
+- **Bind the backend to localhost only.** `main.py` listens on `*:8001`, so the
+  API answers on the LAN IP (verified) with **no authentication of any kind** —
+  anyone on the home WiFi can query the whole library. Harmless today; matters
+  once there are residents with devices on that network. One-line fix: bind
+  `127.0.0.1`. Claude Desktop is unaffected.
+- **Before hosting anywhere public**, in order: authentication (Supabase is
+  already in the stack and handles this), HTTPS, and rate limiting — every query
+  costs real OpenAI spend, so an open endpoint is a billing risk as much as a
+  data one.
+
 - **Revoke the GitHub token in `tac-1`/`tac-2`** — a Personal Access Token is
   embedded in plaintext in their git remotes. Not Karre's; from a tutorial.
 - **Regenerate her GitHub token** with `repo` scope only; current one has

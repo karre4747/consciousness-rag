@@ -670,8 +670,11 @@ def claude_second_pass_analysis(documents: List[Dict[str, Any]], batch_size: int
             if d.get("status") == "analyzed" and d.get("analysis_results") and title not in batch_titles:
                 try:
                     res = json.loads(d["analysis_results"])
-                    themes = res.get("cross_document_themes", [])[:3]  # limit to top 3 themes to keep prompt slim
-                    analyzed_docs.append(f'- "{title}" (Key Themes: {themes})')
+                    # Themes are full paragraphs; three per doc across 300+ docs blew past
+                    # the context window late in a corpus run. Keep one short hint per title.
+                    themes = res.get("cross_document_themes", [])
+                    hint = (themes[0][:160].rsplit(" ", 1)[0] + "...") if themes else ""
+                    analyzed_docs.append(f'- "{title}"' + (f' ({hint})' if hint else ""))
                 except Exception:
                     pass
         if analyzed_docs:
