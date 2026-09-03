@@ -1332,7 +1332,7 @@ async def get_document_status():
             "chunk_count": d['chunk_count'],
             "pass_1_status": "Complete" if d['has_keyword_tags'] else "Pending",
             "pass_2_status": d['ai_provider'] if d['ai_provider'] else "Pending",
-            "pass_3_status": "Complete" if (d['status'] == 'analyzed' or d.get('analysis_results')) else "Pending",
+            "pass_3_status": "Complete" if d['status'] == 'analyzed' else "Pending",
             "raw_providers": [d['ai_provider']] if d['ai_provider'] else [],
             "schema_version": d.get('schema_version', 1)
         })
@@ -2154,8 +2154,8 @@ async def analyze_documents(request: AnalyzeRequest, background_tasks: Backgroun
             matches = results.matches
         elif analysis_type == "pending":
             all_docs = database.get_all_documents()
-            pending_titles = [d['title'] for d in all_docs if d.get('status') != 'analyzed' and not d.get('analysis_results')]
-            titles_to_process = pending_titles[:limit]
+            pending_titles = [d['title'] for d in all_docs if not d.get('analysis_results')]
+            titles_to_process = pending_titles[:limit] if limit and limit > 0 else pending_titles
             logger.info(f"Found {len(pending_titles)} pending documents. Fetching top {len(titles_to_process)} from Pinecone.")
             
             for title in titles_to_process:
@@ -2297,11 +2297,63 @@ async def get_analysis_status():
 
 @app.get("/document-analysis/{title}")
 async def get_document_analysis(title: str):
-    """Retrieve saved deep analysis results for a document"""
+    """Retrieve saved deep analysis or Pinecone metadata for a document"""
     try:
         analysis = database.get_analysis(title)
         if not analysis:
-            raise HTTPException(status_code=404, detail=f"Analysis not found for document: {title}")
+            # Retrieve metadata from Pinecone
+            dummy = [0.1] * 3072
+            results = await pinecone_with_retry(
+                lambda: index.query(
+                    vector=dummy,
+                    filter={"title": title},
+                    top_k=25,
+                    include_metadata=True
+                ),
+                max_retries=2,
+                timeout=10.0
+            )
+            if results and results.matches:
+                all_chakras = set()
+                all_steps = set()
+                all_ascension = set()
+                all_authors = set()
+                all_collections = set()
+                display_title = ""
+                doc_type = ""
+                total_chunks = results.matches[0].metadata.get("total_chunks", len(results.matches))
+
+                for m in results.matches:
+                    meta = m.metadata or {}
+                    if not display_title and meta.get("display_title"):
+                        display_title = meta.get("display_title")
+                    if not doc_type and meta.get("doc_type"):
+                        doc_type = meta.get("doc_type")
+                    if meta.get("author"):
+                        all_authors.add(meta.get("author"))
+                    if meta.get("collection"):
+                        all_collections.add(meta.get("collection"))
+                    for c in meta.get("chakras", []):
+                        all_chakras.add(c)
+                    for s in meta.get("steps", []):
+                        all_steps.add(f"Step {s}")
+                    for a in meta.get("ascension_stages", []):
+                        all_ascension.add(f"Stage {a}")
+
+                analysis = {
+                    "display_title": display_title or title,
+                    "doc_type": doc_type or "Document",
+                    "author": ", ".join(all_authors) if all_authors else "Unknown",
+                    "collection": ", ".join(all_collections) if all_collections else "General",
+                    "chakras": sorted(list(all_chakras)),
+                    "steps": sorted(list(all_steps)),
+                    "ascension_stages": sorted(list(all_ascension)),
+                    "total_chunks": total_chunks,
+                    "status_note": "Ingested, Embedded (3072-dim), and Categorized in Pinecone"
+                }
+            else:
+                raise HTTPException(status_code=404, detail=f"Analysis not found for document: {title}")
+
         return {
             "status": "success",
             "title": title,

@@ -2866,11 +2866,14 @@
                     const themes = (analysis.cross_document_themes || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
                     const patterns = (analysis.consciousness_patterns || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
                     const synth = (analysis.synthesis_opportunities || []).map(t => `<li>${escapeHtml(t)}</li>`).join('') || '<li>None</li>';
-                    const connections = (analysis.suggested_connections || []).map(c => `<li>${escapeHtml(c.relates_to || '')}: ${escapeHtml(c.connection || '')}</li>`).join('') || '<li>None</li>';
+                    const connections = (analysis.suggested_connections || []).map(c => `<li><strong>${escapeHtml(c.relates_to || '')}:</strong> ${escapeHtml(c.connection || '')}</li>`).join('') || '<li>None</li>';
                     
                     const modalHTML = `
-                        <h3>🧠 Claude Deep Analysis for Document</h3>
-                        <p style="font-size:1.1em; font-weight:bold; color:var(--royal-purple); margin-bottom:15px;">${escapeHtml(title)}</p>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 style="margin: 0; color: #667eea;">🧠 Claude Deep Analysis for Document</h3>
+                            <button onclick="closeModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #888;">✕</button>
+                        </div>
+                        <p style="font-size:1.1em; font-weight:bold; color:var(--royal-purple); margin-bottom:15px; text-align:left;">${escapeHtml(title)}</p>
                         
                         <div style="margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; text-align:left;">
                             <strong>Themes:</strong>
@@ -2887,10 +2890,12 @@
                             <ul style="margin:5px 0; padding-left:20px;">${synth}</ul>
                         </div>
                         
-                        <div style="text-align:left;">
+                        <div style="text-align:left; margin-bottom:15px;">
                             <strong>Suggested Connections:</strong>
                             <ul style="margin:5px 0; padding-left:20px;">${connections}</ul>
                         </div>
+
+                        <button onclick="closeModal()" class="secondary-btn" style="width: 100%; margin-top: 10px;">Close</button>
                     `;
                     showModal(modalHTML);
                 } else {
