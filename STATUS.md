@@ -10,7 +10,7 @@ Checked against the running system, not remembered:
 | Fact | Value |
 |---|---|
 | Pinecone `evolve-consciousness-v3` | **40,335 vectors**, **346 documents**, 3072 dim |
-| Docs in `consciousness.db` | **65** — STALE, see below |
+| Docs in `consciousness.db` | **346**, 40,335 chunks — in sync |
 | Files in `library/` | 53 + 4 OCR'd (originals stay in source folders) |
 | Files in `my_content/` | 0 (52 identified, not yet copied) |
 | Chonkie | 1.7.0, `RecursiveChunker`, 1500 tokens |
@@ -21,9 +21,9 @@ the inventory's source paths directly, so files were never copied into
 `library/` first; that folder is not the master copy it is described as being.
 Decide whether to copy them in or accept the inventory CSV as the manifest.
 
-**SQLite is stale and must be repaired.** `tools/ingest.py` writes Pinecone only.
-Anything reading SQLite — MCP `list_documents`, the UI list, spending logic —
-reports 65 documents and 7,348 chunks that no longer exist.
+**SQLite is in sync (fixed Aug 17).** `tools/sync_sqlite.py` rebuilt the table
+from the index, and `record_in_sqlite()` now runs inside the ingest loop so it
+cannot drift again. Pinecone is authoritative; SQLite is a listing cache.
 
 ## Done this session
 
@@ -94,12 +94,7 @@ that this builds for the past. Ported forward instead.
 
 ## Next actions, in order
 
-1. **Repair SQLite, then make ingestion write it.** Two parts: backfill
-   `consciousness.db` from Pinecone so the 346 documents are recorded, and add
-   SQLite writes to `tools/ingest.py` so it cannot drift again. Until this is
-   done, `list_documents` in Claude Desktop shows a 65-document library.
-
-2. **Settle chunk size in ONE place.** Three values live in two units:
+1. **Settle chunk size in ONE place.** Three values live in two units:
 
    | Location | Value | Unit |
    |---|---|---|
@@ -112,26 +107,26 @@ that this builds for the past. Ported forward instead.
    three values invites someone to "fix" the wrong one. Also delete the dead
    `chunk_text()` at `main.py:444` that the new pipeline bypasses.
 
-3. **Build the four practitioner lenses** (Karre / Julie / Erica / Chad) as
+2. **Build the four practitioner lenses** (Karre / Julie / Erica / Chad) as
    *content-creation* prompts — see the two-audience section in
    `PROJECT_CONTEXT.md`. The existing seven personas answer clients; they are the
    wrong shape for "help me build a 30-minute lecture". Enrich with the chakra ↔
    Steps ↔ Fleet mappings.
 
-4. **Decide `library/`'s role.** Ingestion read from original source folders, so
+3. **Decide `library/`'s role.** Ingestion read from original source folders, so
    `library/` holds 53 files while the index holds 346. Either copy the corpus in
    (making it the master copy the docs claim) or treat the inventory CSV as the
    manifest and say so.
 
-5. **Autostart the backend.** A LaunchAgent so port 8001 is always up. Right now
+4. **Autostart the backend.** A LaunchAgent so port 8001 is always up. Right now
    a Mac restart silently breaks every client, and the failure looks like a
    broken system rather than a stopped process.
 
-6. **Consider consolidating seven topic agents to four voices.** Retrieval is now
+5. **Consider consolidating seven topic agents to four voices.** Retrieval is now
    identical across all of them, so they differ only by prompt. Fewer, broader
    voices means less drift and fewer wrong-voice outcomes. Revisit after 3.
 
-7. **Clean up** duplicate `/sync-status` routes; archive the ~11 competing
+6. **Clean up** duplicate `/sync-status` routes; archive the ~11 competing
    markdown files in the repo root.
 
 ## Start in parallel, long lead time
