@@ -713,13 +713,16 @@ REMEMBER: Return ONLY the JSON object. Do not explain anything else. Do not viol
         client = get_anthropic_client()
         message = client.messages.create(
             model=os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022"),
-            max_tokens=8192,
+            # Sonnet 4.5 writes ~44k chars for a 5-doc batch; 8192 truncated mid-JSON.
+            max_tokens=int(os.getenv("CLAUDE_ANALYSIS_MAX_TOKENS", "20000")),
             messages=[{"role": "user", "content": prompt}]
         )
 
         import json
         import re
         response_text = message.content[0].text
+        if getattr(message, "stop_reason", None) == "max_tokens":
+            logger.warning("Claude analysis response was truncated at max_tokens; JSON will likely fail to parse")
 
         # Extract JSON from response
         json_str = ""
